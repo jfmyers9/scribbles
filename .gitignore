@@ -1,0 +1,18 @@
+# Binaries
+scribbles
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Personal notes and plans
+.jim/
