@@ -3,6 +3,8 @@ package scrobbler
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"time"
 
 	"github.com/shkh/lastfm-go/lastfm"
@@ -59,24 +61,25 @@ func (c *Client) GetSession(ctx context.Context, token string) (sessionKey strin
 	return sessionKey, nil
 }
 
-// UpdateNowPlaying updates the now playing status on Last.fm
 func (c *Client) UpdateNowPlaying(ctx context.Context, artist, track, album string, duration time.Duration) error {
 	params := lastfm.P{
 		"artist": artist,
 		"track":  track,
 	}
 
-	// Album is optional
 	if album != "" {
 		params["album"] = album
 	}
 
-	// Duration is optional but recommended (in seconds)
 	if duration > 0 {
 		params["duration"] = int(duration.Seconds())
 	}
 
-	_, err := c.api.Track.UpdateNowPlaying(params)
+	err := retryWithBackoff(ctx, 3, func() error {
+		_, err := c.api.Track.UpdateNowPlaying(params)
+		return err
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to update now playing: %w", err)
 	}
@@ -84,7 +87,6 @@ func (c *Client) UpdateNowPlaying(ctx context.Context, artist, track, album stri
 	return nil
 }
 
-// ScrobbleTrack submits a single scrobble to Last.fm
 func (c *Client) ScrobbleTrack(ctx context.Context, artist, track, album string, timestamp time.Time, duration time.Duration) error {
 	params := lastfm.P{
 		"artist":    artist,
@@ -92,24 +94,27 @@ func (c *Client) ScrobbleTrack(ctx context.Context, artist, track, album string,
 		"timestamp": timestamp.Unix(),
 	}
 
-	// Album is optional
 	if album != "" {
 		params["album"] = album
 	}
 
-	// Duration is optional but recommended (in seconds)
 	if duration > 0 {
 		params["duration"] = int(duration.Seconds())
 	}
 
-	result, err := c.api.Track.Scrobble(params)
+	var result lastfm.TrackScrobble
+
+	err := retryWithBackoff(ctx, 3, func() error {
+		var err error
+		result, err = c.api.Track.Scrobble(params)
+		return err
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to scrobble track: %w", err)
 	}
 
-	// Check if the scrobble was accepted
 	if result.Ignored != "0" {
-		// Extract the ignore message if available
 		if len(result.Scrobbles) > 0 && result.Scrobbles[0].IgnoredMessage.Body != "" {
 			return fmt.Errorf("scrobble was ignored: %s", result.Scrobbles[0].IgnoredMessage.Body)
 		}
@@ -119,7 +124,6 @@ func (c *Client) ScrobbleTrack(ctx context.Context, artist, track, album string,
 	return nil
 }
 
-// ScrobbleBatch submits multiple scrobbles to Last.fm (up to 50)
 func (c *Client) ScrobbleBatch(ctx context.Context, scrobbles []Scrobble) error {
 	if len(scrobbles) == 0 {
 		return nil
@@ -129,7 +133,6 @@ func (c *Client) ScrobbleBatch(ctx context.Context, scrobbles []Scrobble) error 
 		return fmt.Errorf("cannot scrobble more than 50 tracks at once (got %d)", len(scrobbles))
 	}
 
-	// Build batch parameters
 	params := lastfm.P{}
 	for i, s := range scrobbles {
 		params[fmt.Sprintf("artist[%d]", i)] = s.Artist
@@ -145,12 +148,18 @@ func (c *Client) ScrobbleBatch(ctx context.Context, scrobbles []Scrobble) error 
 		}
 	}
 
-	result, err := c.api.Track.Scrobble(params)
+	var result lastfm.TrackScrobble
+
+	err := retryWithBackoff(ctx, 3, func() error {
+		var err error
+		result, err = c.api.Track.Scrobble(params)
+		return err
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to scrobble batch: %w", err)
 	}
 
-	// Check if any scrobbles were ignored
 	if result.Ignored != "0" {
 		return fmt.Errorf("%s scrobbles were ignored by Last.fm", result.Ignored)
 	}
@@ -175,4 +184,58 @@ func (c *Client) IsAuthenticated() bool {
 // GetSessionKey returns the current session key
 func (c *Client) GetSessionKey() string {
 	return c.api.GetSessionKey()
+}
+
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if _, ok := err.(net.Error); ok {
+		return true
+	}
+
+	if _, ok := err.(*url.Error); ok {
+		return true
+	}
+
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return true
+	}
+
+	return false
+}
+
+func retryWithBackoff(ctx context.Context, maxRetries int, fn func() error) error {
+	var lastErr error
+	backoff := 1 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+
+		if !isRetryableError(err) {
+			return err
+		}
+
+		if i == maxRetries-1 {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+			backoff *= 2
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+		}
+	}
+
+	return fmt.Errorf("max retries exceeded: %w", lastErr)
 }

@@ -41,32 +41,41 @@ Use the --log-file flag to log to a file (useful for launchd).`,
 func init() {
 	rootCmd.AddCommand(daemonCmd)
 
-	// Command-line flags
 	daemonCmd.Flags().StringVar(&daemonLogFile, "log-file", "", "Log file path (default: stderr)")
 	daemonCmd.Flags().StringVar(&daemonLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	daemonCmd.Flags().StringVar(&daemonDataDir, "data-dir", "", "Data directory for state and queue (default: ~/.local/share/scribbles)")
 }
 
 func runDaemon(cmd *cobra.Command, args []string) error {
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	// Validate Last.fm credentials
-	if cfg.LastFM.APIKey == "" || cfg.LastFM.APISecret == "" || cfg.LastFM.SessionKey == "" {
-		return fmt.Errorf("Last.fm credentials not configured. Run 'scribbles auth' first")
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Set up logging
-	logger := setupLogger(daemonLogFile, daemonLogLevel)
+	if err := cfg.ValidateLastFM(); err != nil {
+		return err
+	}
+
+	logFile := daemonLogFile
+	if logFile == "" {
+		logFile = cfg.Logging.File
+	}
+
+	logLevel := daemonLogLevel
+	if !cmd.Flags().Changed("log-level") && cfg.Logging.Level != "" {
+		logLevel = cfg.Logging.Level
+	}
+
+	logger := setupLogger(logFile, logLevel)
 
 	logger.Info().
 		Str("version", "dev").
 		Msg("Starting scribbles daemon")
 
-	// Determine data directory
 	dataDir := daemonDataDir
 	if dataDir == "" {
 		homeDir, err := os.UserHomeDir()
@@ -76,44 +85,36 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		dataDir = filepath.Join(homeDir, ".local", "share", "scribbles")
 	}
 
-	// Ensure data directory exists
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
 	logger.Info().Str("data_dir", dataDir).Msg("Using data directory")
 
-	// Create music client
 	musicClient := music.NewAppleScriptClient()
-
-	// Create scrobbler client
 	scrobblerClient := scrobbler.NewWithSession(
 		cfg.LastFM.APIKey,
 		cfg.LastFM.APISecret,
 		cfg.LastFM.SessionKey,
 	)
 
-	// Create daemon config
 	daemonCfg := daemon.Config{
 		PollInterval:      time.Duration(cfg.PollInterval) * time.Second,
 		StateFile:         filepath.Join(dataDir, "state.json"),
 		QueueDB:           filepath.Join(dataDir, "queue.db"),
-		ProcessInterval:   30 * time.Second, // Process queue every 30 seconds
-		ScrobbleThreshold: 0.5,              // 50% threshold (from Last.fm rules)
+		ProcessInterval:   30 * time.Second,
+		ScrobbleThreshold: 0.5,
 	}
 
-	// Create daemon
 	d, err := daemon.New(daemonCfg, musicClient, scrobblerClient, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create daemon: %w", err)
 	}
 
-	// Run daemon (blocks until shutdown signal)
 	if err := d.Run(); err != nil {
 		return fmt.Errorf("daemon error: %w", err)
 	}
 
-	// Graceful shutdown
 	if err := d.Shutdown(); err != nil {
 		logger.Error().Err(err).Msg("Error during shutdown")
 		return err
@@ -123,9 +124,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// setupLogger creates a logger with the specified configuration
 func setupLogger(logFile, logLevel string) zerolog.Logger {
-	// Parse log level
 	level := zerolog.InfoLevel
 	switch logLevel {
 	case "debug":
@@ -138,7 +137,6 @@ func setupLogger(logFile, logLevel string) zerolog.Logger {
 		level = zerolog.ErrorLevel
 	}
 
-	// Set up output
 	var output *os.File
 	if logFile != "" {
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
@@ -152,14 +150,12 @@ func setupLogger(logFile, logLevel string) zerolog.Logger {
 		output = os.Stderr
 	}
 
-	// Create logger
 	logger := zerolog.New(output).
 		Level(level).
 		With().
 		Timestamp().
 		Logger()
 
-	// Use pretty console output if logging to stderr
 	if output == os.Stderr {
 		logger = logger.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 	}
