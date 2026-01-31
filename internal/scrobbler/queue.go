@@ -149,7 +149,7 @@ func (q *Queue) MarkScrobbledBatch(ctx context.Context, ids []int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, "UPDATE scrobbles SET scrobbled = 1, error = NULL WHERE id = ?")
 	if err != nil {

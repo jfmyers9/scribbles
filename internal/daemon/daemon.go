@@ -314,13 +314,17 @@ func (d *Daemon) processPendingScrobbles() {
 				Int64("id", queuedScrobble.ID).
 				Str("track", queuedScrobble.TrackName).
 				Msg("Failed to scrobble")
-			d.queue.MarkError(ctx, queuedScrobble.ID, err.Error())
+			if markErr := d.queue.MarkError(ctx, queuedScrobble.ID, err.Error()); markErr != nil {
+				d.logger.Error().Err(markErr).Msg("Failed to mark scrobble error")
+			}
 		} else {
 			d.logger.Info().
 				Str("track", queuedScrobble.TrackName).
 				Str("artist", queuedScrobble.Artist).
 				Msg("Scrobbled successfully")
-			d.queue.MarkScrobbled(ctx, queuedScrobble.ID)
+			if markErr := d.queue.MarkScrobbled(ctx, queuedScrobble.ID); markErr != nil {
+				d.logger.Error().Err(markErr).Msg("Failed to mark scrobble as completed")
+			}
 		}
 	} else {
 		// Batch scrobble - convert QueuedScrobble to Scrobble
@@ -343,7 +347,9 @@ func (d *Daemon) processPendingScrobbles() {
 
 			// Mark all as error
 			for _, s := range pending {
-				d.queue.MarkError(ctx, s.ID, err.Error())
+				if markErr := d.queue.MarkError(ctx, s.ID, err.Error()); markErr != nil {
+					d.logger.Error().Err(markErr).Int64("id", s.ID).Msg("Failed to mark scrobble error")
+				}
 			}
 		} else {
 			d.logger.Info().
@@ -355,7 +361,9 @@ func (d *Daemon) processPendingScrobbles() {
 			for i, s := range pending {
 				ids[i] = s.ID
 			}
-			d.queue.MarkScrobbledBatch(ctx, ids)
+			if markErr := d.queue.MarkScrobbledBatch(ctx, ids); markErr != nil {
+				d.logger.Error().Err(markErr).Msg("Failed to mark batch as scrobbled")
+			}
 		}
 	}
 }

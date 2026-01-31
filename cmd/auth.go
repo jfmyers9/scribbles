@@ -53,7 +53,10 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Found existing API credentials.\n")
 		fmt.Printf("API Key: %s\n", cfg.LastFM.APIKey)
 		fmt.Print("\nUse existing credentials? [Y/n]: ")
-		response, _ := reader.ReadString('\n')
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			response = "y"
+		}
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "" && response != "y" && response != "yes" {
 			// User wants to enter new credentials
@@ -65,14 +68,20 @@ func runAuth(cmd *cobra.Command, args []string) error {
 	// Prompt for API key if not set
 	if cfg.LastFM.APIKey == "" {
 		fmt.Print("Enter your Last.fm API Key: ")
-		apiKey, _ := reader.ReadString('\n')
+		apiKey, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read API key: %w", err)
+		}
 		cfg.LastFM.APIKey = strings.TrimSpace(apiKey)
 	}
 
 	// Prompt for API secret if not set
 	if cfg.LastFM.APISecret == "" {
 		fmt.Print("Enter your Last.fm API Secret: ")
-		apiSecret, _ := reader.ReadString('\n')
+		apiSecret, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read API secret: %w", err)
+		}
 		cfg.LastFM.APISecret = strings.TrimSpace(apiSecret)
 	}
 
@@ -94,7 +103,7 @@ func runAuth(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nPlease visit this URL to authorize scribbles:")
 	fmt.Printf("\n  %s\n\n", authURL)
 	fmt.Println("After authorizing, press Enter to continue...")
-	reader.ReadString('\n')
+	_, _ = reader.ReadString('\n')
 
 	// Step 4: Get session key (with retries)
 	fmt.Println("Retrieving session key...")

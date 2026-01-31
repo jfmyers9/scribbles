@@ -223,13 +223,7 @@ func (s *State) restore() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.current = TrackState{
-		Track:         ps.Track,
-		StartTime:     ps.StartTime,
-		Scrobbled:     ps.Scrobbled,
-		PausedAt:      ps.PausedAt,
-		TotalPlayTime: ps.TotalPlayTime,
-	}
+	s.current = TrackState(ps)
 
 	return nil
 }
