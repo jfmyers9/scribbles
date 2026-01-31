@@ -1,6 +1,5 @@
 /*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-
+Copyright © 2026 Jim Myers jim.myers@jfmyers.dev
 */
 package main
 
