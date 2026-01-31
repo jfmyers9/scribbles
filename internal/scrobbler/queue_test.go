@@ -19,7 +19,7 @@ func createTestQueue(t *testing.T) *Queue {
 	}
 
 	t.Cleanup(func() {
-		queue.Close()
+		_ = queue.Close()
 	})
 
 	return queue
@@ -31,7 +31,7 @@ func TestNewQueue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create in-memory queue: %v", err)
 		}
-		defer queue.Close()
+		defer func() { _ = queue.Close() }()
 
 		if queue.db == nil {
 			t.Error("queue database is nil")
@@ -43,14 +43,14 @@ func TestNewQueue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		tmpfile.Close()
-		defer os.Remove(tmpfile.Name())
+		_ = tmpfile.Close()
+		defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 		queue, err := NewQueue(tmpfile.Name())
 		if err != nil {
 			t.Fatalf("failed to create file-based queue: %v", err)
 		}
-		defer queue.Close()
+		defer func() { _ = queue.Close() }()
 
 		if queue.db == nil {
 			t.Error("queue database is nil")
@@ -303,7 +303,9 @@ func TestQueueCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to add old scrobble: %v", err)
 	}
-	queue.MarkScrobbled(ctx, oldID)
+	if err := queue.MarkScrobbled(ctx, oldID); err != nil {
+		t.Fatalf("failed to mark old scrobble: %v", err)
+	}
 
 	// Add recent scrobbled scrobble
 	recentScrobble := Scrobble{
@@ -316,7 +318,9 @@ func TestQueueCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to add recent scrobble: %v", err)
 	}
-	queue.MarkScrobbled(ctx, recentID)
+	if err := queue.MarkScrobbled(ctx, recentID); err != nil {
+		t.Fatalf("failed to mark recent scrobble: %v", err)
+	}
 
 	// Add pending scrobble (should not be deleted)
 	pendingScrobble := Scrobble{
@@ -366,7 +370,9 @@ func TestQueueCleanupOldFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to add old scrobble: %v", err)
 	}
-	queue.MarkError(ctx, oldID, "network error")
+	if err := queue.MarkError(ctx, oldID, "network error"); err != nil {
+		t.Fatalf("failed to mark old scrobble error: %v", err)
+	}
 
 	// Add recent failed scrobble
 	recentScrobble := Scrobble{
@@ -379,7 +385,9 @@ func TestQueueCleanupOldFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to add recent scrobble: %v", err)
 	}
-	queue.MarkError(ctx, recentID, "network error")
+	if err := queue.MarkError(ctx, recentID, "network error"); err != nil {
+		t.Fatalf("failed to mark recent scrobble error: %v", err)
+	}
 
 	// Add old pending without error (should not be deleted)
 	oldPendingScrobble := Scrobble{
@@ -490,7 +498,9 @@ func TestQueueGetAll(t *testing.T) {
 
 		// Mark first one as scrobbled
 		if i == 0 {
-			queue.MarkScrobbled(ctx, id)
+			if err := queue.MarkScrobbled(ctx, id); err != nil {
+				t.Fatalf("failed to mark scrobbled: %v", err)
+			}
 		}
 	}
 
@@ -568,7 +578,7 @@ func TestQueueEdgeCases(t *testing.T) {
 // Benchmark tests
 func BenchmarkQueueAdd(b *testing.B) {
 	queue, _ := NewQueue(":memory:")
-	defer queue.Close()
+	defer func() { _ = queue.Close() }()
 	ctx := context.Background()
 
 	scrobble := Scrobble{
@@ -581,13 +591,13 @@ func BenchmarkQueueAdd(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		queue.Add(ctx, scrobble)
+		_, _ = queue.Add(ctx, scrobble)
 	}
 }
 
 func BenchmarkQueueGetPending(b *testing.B) {
 	queue, _ := NewQueue(":memory:")
-	defer queue.Close()
+	defer func() { _ = queue.Close() }()
 	ctx := context.Background()
 
 	// Add some scrobbles
@@ -598,11 +608,11 @@ func BenchmarkQueueGetPending(b *testing.B) {
 			Duration:  3 * time.Minute,
 			Timestamp: time.Now(),
 		}
-		queue.Add(ctx, scrobble)
+		_, _ = queue.Add(ctx, scrobble)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		queue.GetPending(ctx, 50)
+		_, _ = queue.GetPending(ctx, 50)
 	}
 }

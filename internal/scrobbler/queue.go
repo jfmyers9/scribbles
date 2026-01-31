@@ -49,7 +49,7 @@ func NewQueue(dbPath string) (*Queue, error) {
 
 	for _, pragma := range pragmas {
 		if _, err := db.Exec(pragma); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, fmt.Errorf("failed to set pragma: %w", err)
 		}
 	}
@@ -73,7 +73,7 @@ func NewQueue(dbPath string) (*Queue, error) {
 	`
 
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
 
@@ -155,7 +155,7 @@ func (q *Queue) MarkScrobbledBatch(ctx context.Context, ids []int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, id := range ids {
 		if _, err := stmt.ExecContext(ctx, id); err != nil {
@@ -213,7 +213,7 @@ func (q *Queue) GetPending(ctx context.Context, limit int) ([]QueuedScrobble, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending scrobbles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var scrobbles []QueuedScrobble
 	for rows.Next() {
@@ -260,7 +260,7 @@ func (q *Queue) GetAll(ctx context.Context) ([]QueuedScrobble, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all scrobbles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var scrobbles []QueuedScrobble
 	for rows.Next() {

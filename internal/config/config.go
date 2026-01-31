@@ -122,13 +122,13 @@ func (c *Config) Validate() error {
 
 func (c *Config) ValidateLastFM() error {
 	if c.LastFM.APIKey == "" {
-		return fmt.Errorf("Last.fm API key not configured\n\nTo configure Last.fm:\n  1. Get API credentials from https://www.last.fm/api/account/create\n  2. Run: scribbles auth")
+		return fmt.Errorf("last.fm API key not configured\n\nTo configure Last.fm:\n  1. Get API credentials from https://www.last.fm/api/account/create\n  2. Run: scribbles auth")
 	}
 	if c.LastFM.APISecret == "" {
-		return fmt.Errorf("Last.fm API secret not configured\n\nTo configure Last.fm:\n  1. Get API credentials from https://www.last.fm/api/account/create\n  2. Run: scribbles auth")
+		return fmt.Errorf("last.fm API secret not configured\n\nTo configure Last.fm:\n  1. Get API credentials from https://www.last.fm/api/account/create\n  2. Run: scribbles auth")
 	}
 	if c.LastFM.SessionKey == "" {
-		return fmt.Errorf("Last.fm session key not configured\n\nTo authenticate:\n  Run: scribbles auth")
+		return fmt.Errorf("last.fm session key not configured\n\nTo authenticate:\n  Run: scribbles auth")
 	}
 	return nil
 }
