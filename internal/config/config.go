@@ -85,3 +85,22 @@ func getConfigDir() string {
 func GetConfigDir() string {
 	return getConfigDir()
 }
+
+// Save writes configuration to file
+func (c *Config) Save() error {
+	v := viper.New()
+
+	// Set config file path
+	configDir := getConfigDir()
+	configFile := filepath.Join(configDir, "config.yaml")
+
+	// Set values in viper
+	v.Set("output_format", c.OutputFormat)
+	v.Set("poll_interval", c.PollInterval)
+	v.Set("lastfm.api_key", c.LastFM.APIKey)
+	v.Set("lastfm.api_secret", c.LastFM.APISecret)
+	v.Set("lastfm.session_key", c.LastFM.SessionKey)
+
+	// Write to file
+	return v.WriteConfigAs(configFile)
+}
