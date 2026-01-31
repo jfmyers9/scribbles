@@ -5,36 +5,93 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"os"
+	"text/template"
+	"time"
 
+	"github.com/jfmyers9/scribbles/internal/config"
+	"github.com/jfmyers9/scribbles/internal/music"
 	"github.com/spf13/cobra"
 )
 
 // nowCmd represents the now command
 var nowCmd = &cobra.Command{
 	Use:   "now",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Display currently playing track from Apple Music",
+	Long: `Query Apple Music and display the currently playing track.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("now called")
-	},
+The output format can be customized in ~/.config/scribbles/config.yaml
+using a Go template. Available fields: .Name, .Artist, .Album, .Duration, .Position
+
+Exit codes:
+  0 - Track is currently playing
+  1 - No track playing, paused, or Music app not running`,
+	RunE: runNow,
 }
 
 func init() {
 	rootCmd.AddCommand(nowCmd)
 
-	// Here you will define your flags and configuration settings.
+	// Add format flag to override config
+	nowCmd.Flags().StringP("format", "f", "", "Output format template (overrides config)")
+}
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// nowCmd.PersistentFlags().String("foo", "", "A help for foo")
+func runNow(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// nowCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Check for format flag override
+	formatFlag, _ := cmd.Flags().GetString("format")
+	if formatFlag != "" {
+		cfg.OutputFormat = formatFlag
+	}
+
+	// Create music client
+	client := music.NewAppleScriptClient()
+
+	// Get current track
+	track, err := client.GetCurrentTrack(ctx)
+	if err != nil {
+		// If Music app is not running or other error, exit with code 1
+		return fmt.Errorf("failed to get current track: %w", err)
+	}
+
+	// If not playing, exit with code 1
+	if track.State != music.StatePlaying {
+		os.Exit(1)
+		return nil
+	}
+
+	// Format and print output
+	output, err := formatTrack(track, cfg.OutputFormat)
+	if err != nil {
+		return fmt.Errorf("failed to format output: %w", err)
+	}
+
+	fmt.Println(output)
+	return nil
+}
+
+// formatTrack applies the template to the track data
+func formatTrack(track *music.Track, templateStr string) (string, error) {
+	tmpl, err := template.New("output").Parse(templateStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, track); err != nil {
+		return "", fmt.Errorf("template execution failed: %w", err)
+	}
+
+	return buf.String(), nil
 }
