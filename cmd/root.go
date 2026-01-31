@@ -5,9 +5,17 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+)
+
+// Version information (set via ldflags during build)
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
 )
 
 
@@ -15,16 +23,15 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "scribbles",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "Apple Music scrobbler for Last.fm",
+	Long: `scribbles is an Apple Music scrobbler for Last.fm.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+It runs as a background daemon that monitors Apple Music playback
+and scrobbles tracks to Last.fm according to Last.fm's scrobbling rules.
+
+It also provides a CLI command to query the currently playing track,
+useful for displaying in tmux status lines or other status bars.`,
+	Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, buildDate),
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -37,15 +44,7 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.scribbles.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// Global flags can be added here if needed
 }
 
 
