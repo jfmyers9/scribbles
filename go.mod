@@ -3,8 +3,8 @@ module github.com/jfmyers9/scribbles
 go 1.24.0
 
 require (
+	github.com/mattn/go-runewidth v0.0.19
 	github.com/rs/zerolog v1.34.0
-	github.com/shkh/lastfm-go v0.0.0-20191215035245-89a801c244e0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	modernc.org/sqlite v1.44.3
@@ -19,7 +19,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect

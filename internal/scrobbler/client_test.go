@@ -10,8 +10,8 @@ func TestNew(t *testing.T) {
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
-	if client.api == nil {
-		t.Fatal("expected non-nil api")
+	if client.client == nil {
+		t.Fatal("expected non-nil client")
 	}
 }
 
