@@ -2,6 +2,8 @@ package lastfm
 
 import (
 	"context"
+	"encoding/xml"
+	"fmt"
 )
 
 // AuthService provides authentication operations for the Last.fm API.
@@ -22,8 +24,17 @@ type AuthService struct {
 //	}
 //	fmt.Println("Visit:", client.Auth().GetAuthURL(token.Token))
 func (a *AuthService) GetToken(ctx context.Context) (*Token, error) {
-	// Implementation will be added in core implementation phase
-	return nil, nil
+	resp, err := a.client.call(ctx, "auth.getToken", nil, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var token Token
+	if err := unmarshalToken(resp, &token); err != nil {
+		return nil, err
+	}
+
+	return &token, nil
 }
 
 // GetAuthURL returns the URL where users authorize the token.
@@ -56,6 +67,61 @@ func (a *AuthService) GetAuthURL(token string) string {
 //	client.SetSessionKey(session.Key)
 //	// Store session.Key for future use
 func (a *AuthService) GetSession(ctx context.Context, token string) (*Session, error) {
-	// Implementation will be added in core implementation phase
-	return nil, nil
+	params := map[string]string{
+		"token": token,
+	}
+
+	resp, err := a.client.call(ctx, "auth.getSession", params, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var session Session
+	if err := unmarshalSession(resp, &session); err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+// tokenResponse represents the XML response from auth.getToken.
+type tokenResponse struct {
+	Token string `xml:"token"`
+}
+
+// unmarshalToken parses the auth.getToken XML response.
+func unmarshalToken(data []byte, token *Token) error {
+	// Wrap inner XML in root element for proper unmarshaling
+	wrapped := []byte("<root>" + string(data) + "</root>")
+
+	var resp tokenResponse
+	if err := xml.Unmarshal(wrapped, &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal token response: %w", err)
+	}
+
+	token.Token = resp.Token
+	return nil
+}
+
+// sessionResponse represents the XML response from auth.getSession.
+type sessionResponse struct {
+	Name       string `xml:"session>name"`
+	Key        string `xml:"session>key"`
+	Subscriber int    `xml:"session>subscriber"`
+}
+
+// unmarshalSession parses the auth.getSession XML response.
+func unmarshalSession(data []byte, session *Session) error {
+	// Wrap inner XML in root element for proper unmarshaling
+	wrapped := []byte("<root>" + string(data) + "</root>")
+
+	var resp sessionResponse
+	if err := xml.Unmarshal(wrapped, &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal session response: %w", err)
+	}
+
+	session.Key = resp.Key
+	session.Username = resp.Name
+	session.Subscriber = resp.Subscriber == 1
+	return nil
 }
