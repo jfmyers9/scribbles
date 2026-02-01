@@ -2,6 +2,7 @@ package lastfm
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"time"
 )
@@ -38,8 +39,41 @@ func (s *ScrobbleService) UpdateNowPlaying(ctx context.Context, track Track) (*N
 	if s.client.sessionKey == "" {
 		return nil, fmt.Errorf("lastfm: session key required for scrobbling")
 	}
-	// Implementation will be added in core implementation phase
-	return nil, nil
+
+	params := map[string]string{
+		"artist": track.Artist,
+		"track":  track.Track,
+		"sk":     s.client.sessionKey,
+	}
+
+	// Add optional parameters
+	if track.Album != "" {
+		params["album"] = track.Album
+	}
+	if track.AlbumArtist != "" {
+		params["albumArtist"] = track.AlbumArtist
+	}
+	if track.Duration > 0 {
+		params["duration"] = fmt.Sprintf("%d", track.Duration)
+	}
+	if track.TrackNumber > 0 {
+		params["trackNumber"] = fmt.Sprintf("%d", track.TrackNumber)
+	}
+	if track.MBTrackID != "" {
+		params["mbid"] = track.MBTrackID
+	}
+
+	resp, err := s.client.call(ctx, "track.updateNowPlaying", params, true)
+	if err != nil {
+		return nil, err
+	}
+
+	nowPlaying, err := unmarshalNowPlaying(resp)
+	if err != nil {
+		return nil, fmt.Errorf("lastfm: failed to parse now playing response: %w", err)
+	}
+
+	return nowPlaying, nil
 }
 
 // Scrobble submits a single scrobble to Last.fm.
@@ -114,6 +148,152 @@ func (s *ScrobbleService) ScrobbleBatch(ctx context.Context, scrobbles []Scrobbl
 	if len(scrobbles) > MaxBatchSize {
 		scrobbles = scrobbles[:MaxBatchSize]
 	}
-	// Implementation will be added in core implementation phase
-	return nil, nil
+
+	params := map[string]string{
+		"sk": s.client.sessionKey,
+	}
+
+	// Add batch parameters with indexed keys
+	for i, scrobble := range scrobbles {
+		idx := fmt.Sprintf("[%d]", i)
+		params["artist"+idx] = scrobble.Track.Artist
+		params["track"+idx] = scrobble.Track.Track
+		params["timestamp"+idx] = fmt.Sprintf("%d", scrobble.Timestamp.Unix())
+
+		// Add optional parameters
+		if scrobble.Track.Album != "" {
+			params["album"+idx] = scrobble.Track.Album
+		}
+		if scrobble.Track.AlbumArtist != "" {
+			params["albumArtist"+idx] = scrobble.Track.AlbumArtist
+		}
+		if scrobble.Track.Duration > 0 {
+			params["duration"+idx] = fmt.Sprintf("%d", scrobble.Track.Duration)
+		}
+		if scrobble.Track.TrackNumber > 0 {
+			params["trackNumber"+idx] = fmt.Sprintf("%d", scrobble.Track.TrackNumber)
+		}
+		if scrobble.Track.MBTrackID != "" {
+			params["mbid"+idx] = scrobble.Track.MBTrackID
+		}
+	}
+
+	resp, err := s.client.call(ctx, "track.scrobble", params, true)
+	if err != nil {
+		return nil, err
+	}
+
+	scrobbleResp, err := unmarshalScrobbles(resp)
+	if err != nil {
+		return nil, fmt.Errorf("lastfm: failed to parse scrobble response: %w", err)
+	}
+
+	return scrobbleResp, nil
+}
+
+// nowPlayingResponse represents the XML response from track.updateNowPlaying.
+type nowPlayingResponse struct {
+	Artist      string `xml:"nowplaying>artist"`
+	Track       string `xml:"nowplaying>track"`
+	Album       string `xml:"nowplaying>album"`
+	AlbumArtist string `xml:"nowplaying>albumArtist"`
+	IgnoredMessage struct {
+		Code int    `xml:"code,attr"`
+		Text string `xml:",chardata"`
+	} `xml:"nowplaying>ignoredMessage"`
+}
+
+// unmarshalNowPlaying parses the XML response from track.updateNowPlaying.
+func unmarshalNowPlaying(data []byte) (*NowPlayingResponse, error) {
+	// Wrap inner XML in root element for proper unmarshaling
+	wrapped := []byte("<root>" + string(data) + "</root>")
+
+	var resp nowPlayingResponse
+	if err := xml.Unmarshal(wrapped, &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal now playing response: %w", err)
+	}
+
+	return &NowPlayingResponse{
+		Artist:      resp.Artist,
+		Track:       resp.Track,
+		Album:       resp.Album,
+		AlbumArtist: resp.AlbumArtist,
+		IgnoredMessage: struct {
+			Code int
+			Text string
+		}{
+			Code: resp.IgnoredMessage.Code,
+			Text: resp.IgnoredMessage.Text,
+		},
+	}, nil
+}
+
+// scrobbleResponse represents the XML response from track.scrobble.
+type scrobbleResponse struct {
+	Scrobbles struct {
+		Accepted  string `xml:"accepted,attr"`
+		Ignored   string `xml:"ignored,attr"`
+		Scrobbles []struct {
+			Artist    string `xml:"artist"`
+			Track     string `xml:"track"`
+			Album     string `xml:"album"`
+			Timestamp string `xml:"timestamp"`
+			IgnoredMessage struct {
+				Code int    `xml:"code,attr"`
+				Text string `xml:",chardata"`
+			} `xml:"ignoredMessage"`
+		} `xml:"scrobble"`
+	} `xml:"scrobbles"`
+}
+
+// unmarshalScrobbles parses the XML response from track.scrobble.
+func unmarshalScrobbles(data []byte) (*ScrobbleResponse, error) {
+	// Wrap inner XML in root element for proper unmarshaling
+	wrapped := []byte("<root>" + string(data) + "</root>")
+
+	var resp scrobbleResponse
+	if err := xml.Unmarshal(wrapped, &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal scrobble response: %w", err)
+	}
+
+	// Parse accepted and ignored counts
+	accepted := 0
+	ignored := 0
+	if resp.Scrobbles.Accepted != "" {
+		fmt.Sscanf(resp.Scrobbles.Accepted, "%d", &accepted)
+	}
+	if resp.Scrobbles.Ignored != "" {
+		fmt.Sscanf(resp.Scrobbles.Ignored, "%d", &ignored)
+	}
+
+	result := &ScrobbleResponse{
+		Accepted:  accepted,
+		Ignored:   ignored,
+		Scrobbles: make([]struct {
+			Artist    string
+			Track     string
+			Album     string
+			Timestamp int64
+			IgnoredMessage struct {
+				Code int
+				Text string
+			}
+		}, len(resp.Scrobbles.Scrobbles)),
+	}
+
+	for i, s := range resp.Scrobbles.Scrobbles {
+		var timestamp int64
+		if s.Timestamp != "" {
+			fmt.Sscanf(s.Timestamp, "%d", &timestamp)
+		}
+
+		result.Scrobbles[i].Artist = s.Artist
+		result.Scrobbles[i].Track = s.Track
+		result.Scrobbles[i].Album = s.Album
+		result.Scrobbles[i].Timestamp = timestamp
+		result.Scrobbles[i].IgnoredMessage.Code = s.IgnoredMessage.Code
+		result.Scrobbles[i].IgnoredMessage.Text = s.IgnoredMessage.Text
+	}
+
+	return result, nil
 }
