@@ -139,3 +139,76 @@ func parseTrackOutput(output string) (*Track, error) {
 func secondsToDuration(seconds float64) time.Duration {
 	return time.Duration(seconds * float64(time.Second))
 }
+
+// Play resumes playback in Apple Music
+func (c *AppleScriptClient) Play(ctx context.Context) error {
+	script := `tell application "Music" to play`
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to play: %w", err)
+	}
+	return nil
+}
+
+// Pause pauses playback in Apple Music
+func (c *AppleScriptClient) Pause(ctx context.Context) error {
+	script := `tell application "Music" to pause`
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to pause: %w", err)
+	}
+	return nil
+}
+
+// PlayPause toggles between play and pause in Apple Music
+func (c *AppleScriptClient) PlayPause(ctx context.Context) error {
+	script := `tell application "Music" to playpause`
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to playpause: %w", err)
+	}
+	return nil
+}
+
+// NextTrack skips to the next track in Apple Music
+func (c *AppleScriptClient) NextTrack(ctx context.Context) error {
+	script := `tell application "Music" to next track`
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to skip to next track: %w", err)
+	}
+	return nil
+}
+
+// PreviousTrack goes back to the previous track in Apple Music
+func (c *AppleScriptClient) PreviousTrack(ctx context.Context) error {
+	script := `tell application "Music" to back track`
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to go to previous track: %w", err)
+	}
+	return nil
+}
+
+// SetShuffle enables or disables shuffle mode in Apple Music
+func (c *AppleScriptClient) SetShuffle(ctx context.Context, enabled bool) error {
+	script := fmt.Sprintf(`tell application "Music" to set shuffle enabled to %t`, enabled)
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set shuffle: %w", err)
+	}
+	return nil
+}
+
+// SetVolume sets the playback volume in Apple Music (0-100)
+func (c *AppleScriptClient) SetVolume(ctx context.Context, level int) error {
+	if level < 0 || level > 100 {
+		return fmt.Errorf("volume level must be between 0 and 100, got %d", level)
+	}
+	script := fmt.Sprintf(`tell application "Music" to set sound volume to %d`, level)
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set volume: %w", err)
+	}
+	return nil
+}

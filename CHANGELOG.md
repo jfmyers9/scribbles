@@ -8,6 +8,19 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Music control commands for Apple Music playback control
+  - `scribbles play` - Resume playback
+  - `scribbles pause` - Pause playback
+  - `scribbles playpause` - Toggle play/pause
+  - `scribbles next` - Skip to next track
+  - `scribbles prev` - Go to previous track
+  - `scribbles shuffle [on|off]` - Set shuffle mode
+  - `scribbles volume [0-100]` - Set playback volume
+- Tmux integration examples for keyboard-controlled music playback
+- Control methods in `AppleScriptClient` for playback control
+
 ## [0.2.0] - 2026-01-31
 
 ### Added

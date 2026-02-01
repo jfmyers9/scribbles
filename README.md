@@ -230,6 +230,106 @@ Exit codes:
 - `0`: Music is playing
 - `1`: Music is stopped or paused
 
+### Music Control Commands
+
+Control Apple Music playback directly from the command line. These commands
+are useful for creating keyboard shortcuts or integrating with tmux.
+
+#### `scribbles play`
+
+Resume playback in Apple Music.
+
+```bash
+scribbles play
+```
+
+#### `scribbles pause`
+
+Pause playback in Apple Music.
+
+```bash
+scribbles pause
+```
+
+#### `scribbles playpause`
+
+Toggle between play and pause.
+
+```bash
+scribbles playpause
+```
+
+#### `scribbles next`
+
+Skip to the next track.
+
+```bash
+scribbles next
+```
+
+#### `scribbles prev`
+
+Go to the previous track.
+
+```bash
+scribbles prev
+```
+
+#### `scribbles shuffle [on|off]`
+
+Set shuffle mode.
+
+```bash
+scribbles shuffle on
+scribbles shuffle off
+```
+
+#### `scribbles volume [0-100]`
+
+Set playback volume (0-100).
+
+```bash
+scribbles volume 50
+scribbles volume 100
+```
+
+#### Integration with tmux
+
+You can bind keys in tmux to control music playback without leaving your
+terminal:
+
+```tmux
+# Add to your ~/.tmux.conf
+
+# Alt+Space: toggle play/pause
+bind-key -n M-Space run-shell "scribbles playpause"
+
+# Alt+N: next track
+bind-key -n M-n run-shell "scribbles next"
+
+# Alt+P: previous track
+bind-key -n M-p run-shell "scribbles prev"
+
+# Alt+Plus: volume high
+bind-key -n M-+ run-shell "scribbles volume 75"
+
+# Alt+Minus: volume low
+bind-key -n M-- run-shell "scribbles volume 25"
+```
+
+After adding these bindings, reload your tmux config:
+
+```bash
+tmux source-file ~/.tmux.conf
+```
+
+Now you can control music playback with keyboard shortcuts:
+- **Alt+Space**: Play/Pause
+- **Alt+N**: Next track
+- **Alt+P**: Previous track
+- **Alt++**: Volume up
+- **Alt+-**: Volume down
+
 ### `scribbles auth`
 
 Authenticate with Last.fm.
