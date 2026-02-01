@@ -15,6 +15,55 @@ daemon.
 - **CLI Status**: Query current track for tmux/status bars
 - **Easy Setup**: Simple authentication flow and automatic installation
 
+## Last.fm SDK
+
+This project includes a modern, reusable Last.fm API client library at
+`pkg/lastfm/`. It can be used independently in your own Go projects.
+
+### Installation
+
+```bash
+go get github.com/jfmyers9/scribbles/pkg/lastfm
+```
+
+### Quick Example
+
+```go
+import "github.com/jfmyers9/scribbles/pkg/lastfm"
+
+// Create client
+client, err := lastfm.NewClient(lastfm.Config{
+    APIKey:    "your-api-key",
+    APISecret: "your-api-secret",
+})
+
+// Authenticate
+token, _ := client.Auth().GetToken(ctx)
+fmt.Println("Visit:", client.Auth().GetAuthURL(token.Token))
+session, _ := client.Auth().GetSession(ctx, token.Token)
+client.SetSessionKey(session.Key)
+
+// Scrobble
+track := lastfm.Track{
+    Artist: "The Beatles",
+    Track:  "Yesterday",
+}
+client.Scrobble().Scrobble(ctx, track, time.Now())
+```
+
+### Features
+
+- Clean, type-safe API with context support
+- Automatic retry with exponential backoff
+- Batch scrobbling (up to 50 tracks)
+- Structured error types
+- Comprehensive godoc and examples
+- Zero dependencies outside stdlib
+
+For detailed documentation, see
+[pkg/lastfm/README.md](pkg/lastfm/README.md) or view on
+[pkg.go.dev](https://pkg.go.dev/github.com/jfmyers9/scribbles/pkg/lastfm).
+
 ## Installation
 
 ### From Source
@@ -455,7 +504,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - [Cobra](https://github.com/spf13/cobra) - CLI framework
 - [Viper](https://github.com/spf13/viper) - Configuration management
-- [lastfm-go](https://github.com/shkh/lastfm-go) - Last.fm API client
 - [zerolog](https://github.com/rs/zerolog) - Structured logging
 - [modernc.org/sqlite](https://modernc.org/sqlite) - Pure Go SQLite
 
