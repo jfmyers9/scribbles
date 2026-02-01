@@ -81,6 +81,10 @@ Example configuration:
 # Available fields: .Name, .Artist, .Album, .Duration, .Position, .State
 output_format: "{{.Artist}} - {{.Name}}"
 
+# Fixed output width for the "now" command (0=disabled)
+# Useful for tmux status bars to prevent layout shifts
+output_width: 0
+
 # Polling interval for the daemon (in seconds)
 poll_interval: 3
 
@@ -129,6 +133,7 @@ scribbles now [flags]
 
 Flags:
 - `--format <template>`: Override the output format template
+- `--width <n>`: Set fixed output width (0=disabled, overrides config)
 
 Examples:
 
@@ -144,6 +149,16 @@ scribbles now --format "{{.Name}} by {{.Artist}}"
 # Full format
 scribbles now --format "{{.Artist}} - {{.Name}} ({{.Album}})"
 # Output: Artist Name - Track Name (Album Name)
+
+# Fixed width output (useful for tmux status bars)
+scribbles now --width 30
+# Output: Artist Name - Track Name
+# (padded to exactly 30 characters)
+
+# Truncate long output
+scribbles now --width 20
+# Output: Artist Name - Tra...
+# (truncated with "..." if longer than 20 characters)
 ```
 
 Exit codes:
@@ -201,11 +216,33 @@ Or with a prefix:
 set -g status-right "♫ #(scribbles now 2>/dev/null || echo 'Not playing')"
 ```
 
-Update interval (in seconds):
+### Fixed-Width Output for Stable Status Bars
+
+To prevent the status bar from shifting as track names change length, use the
+`--width` flag or set `output_width` in your config:
 
 ```tmux
+# Using the --width flag (25 characters fixed width)
+set -g status-right "♫ #(scribbles now --width 25 2>/dev/null || echo '—                       ')"
 set -g status-interval 5
 ```
+
+Or configure it globally in `~/.config/scribbles/config.yaml`:
+
+```yaml
+output_format: "🎵 {{.Name}} - {{.Artist}}"
+output_width: 25
+```
+
+Then use in tmux:
+
+```tmux
+set -g status-right "#(scribbles now 2>/dev/null || echo '—                       ')"
+```
+
+The width is measured in display columns, accounting for Unicode characters
+like emoji. When output is longer than the specified width, it's truncated with
+"...". When shorter, it's padded with spaces.
 
 ## How Scrobbling Works
 

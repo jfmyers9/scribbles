@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	OutputFormat string
+	OutputWidth  int
 	PollInterval int
 	LastFM       LastFMConfig
 	Logging      LoggingConfig
@@ -37,6 +38,7 @@ func Load() (*Config, error) {
 	v.AddConfigPath(".")
 
 	v.SetDefault("output_format", "{{.Artist}} - {{.Name}}")
+	v.SetDefault("output_width", 0)
 	v.SetDefault("poll_interval", 3)
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.file", "")
@@ -48,6 +50,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		OutputFormat: v.GetString("output_format"),
+		OutputWidth:  v.GetInt("output_width"),
 		PollInterval: v.GetInt("poll_interval"),
 		LastFM: LastFMConfig{
 			APIKey:     v.GetString("lastfm.api_key"),
@@ -140,6 +143,7 @@ func (c *Config) Save() error {
 	configFile := filepath.Join(configDir, "config.yaml")
 
 	v.Set("output_format", c.OutputFormat)
+	v.Set("output_width", c.OutputWidth)
 	v.Set("poll_interval", c.PollInterval)
 	v.Set("lastfm.api_key", c.LastFM.APIKey)
 	v.Set("lastfm.api_secret", c.LastFM.APISecret)

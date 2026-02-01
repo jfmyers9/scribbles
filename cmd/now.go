@@ -8,11 +8,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"text/template"
 	"time"
 
 	"github.com/jfmyers9/scribbles/internal/config"
 	"github.com/jfmyers9/scribbles/internal/music"
+	"github.com/mattn/go-runewidth"
 	"github.com/spf13/cobra"
 )
 
@@ -36,6 +38,8 @@ func init() {
 
 	// Add format flag to override config
 	nowCmd.Flags().StringP("format", "f", "", "Output format template (overrides config)")
+	// Add width flag to set fixed output width
+	nowCmd.Flags().IntP("width", "w", 0, "Fixed output width (0=disabled, overrides config)")
 }
 
 func runNow(cmd *cobra.Command, args []string) error {
@@ -76,6 +80,15 @@ func runNow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to format output: %w", err)
 	}
 
+	// Apply width padding if requested
+	width, _ := cmd.Flags().GetInt("width")
+	if width == 0 {
+		width = cfg.OutputWidth
+	}
+	if width > 0 {
+		output = padToWidth(output, width)
+	}
+
 	fmt.Println(output)
 	return nil
 }
@@ -93,4 +106,50 @@ func formatTrack(track *music.Track, templateStr string) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// padToWidth pads or truncates text to a fixed display width.
+// Width is measured in display columns, accounting for Unicode characters.
+// If width <= 0, returns text unchanged.
+// If text is longer than width, truncates with "..." suffix.
+// If text is shorter than width, pads with spaces.
+func padToWidth(text string, width int) string {
+	if width <= 0 {
+		return text // no padding requested
+	}
+
+	currentWidth := runewidth.StringWidth(text)
+
+	if currentWidth > width {
+		// Truncate with "..." suffix
+		// We need to manually truncate and add "..." then pad if needed
+		ellipsis := "..."
+		ellipsisWidth := runewidth.StringWidth(ellipsis)
+
+		if width <= ellipsisWidth {
+			// If width is too small, just return ellipsis truncated to width
+			return runewidth.Truncate(ellipsis, width, "")
+		}
+
+		// Truncate to (width - ellipsisWidth) and add ellipsis
+		truncated := runewidth.Truncate(text, width-ellipsisWidth, "")
+		result := truncated + ellipsis
+
+		// Ensure we're exactly at the target width (in case truncate was imprecise)
+		resultWidth := runewidth.StringWidth(result)
+		if resultWidth < width {
+			padding := strings.Repeat(" ", width-resultWidth)
+			return result + padding
+		} else if resultWidth > width {
+			// Shouldn't happen, but handle it just in case
+			return runewidth.Truncate(result, width, "")
+		}
+		return result
+	} else if currentWidth < width {
+		// Pad with spaces
+		padding := strings.Repeat(" ", width-currentWidth)
+		return text + padding
+	}
+
+	return text // exactly the right width
 }
