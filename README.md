@@ -1,5 +1,8 @@
 # Scribbles
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/jfmyers9/scribbles.svg)](https://pkg.go.dev/github.com/jfmyers9/scribbles)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jfmyers9/scribbles)](https://goreportcard.com/report/github.com/jfmyers9/scribbles)
+
 A lightweight Apple Music scrobbler for Last.fm that runs as a macOS
 daemon.
 
