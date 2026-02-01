@@ -85,6 +85,11 @@ output_format: "{{.Artist}} - {{.Name}}"
 # Useful for tmux status bars to prevent layout shifts
 output_width: 0
 
+# Marquee scrolling for long track names (requires output_width > 0)
+marquee_enabled: false      # Enable marquee scrolling
+marquee_speed: 2            # Scroll speed in characters per second
+marquee_separator: " • "    # Separator between text repetitions
+
 # Polling interval for the daemon (in seconds)
 poll_interval: 3
 
@@ -134,6 +139,7 @@ scribbles now [flags]
 Flags:
 - `--format <template>`: Override the output format template
 - `--width <n>`: Set fixed output width (0=disabled, overrides config)
+- `--marquee`: Enable marquee scrolling for long text (requires --width)
 
 Examples:
 
@@ -159,6 +165,13 @@ scribbles now --width 30
 scribbles now --width 20
 # Output: Artist Name - Tra...
 # (truncated with "..." if longer than 20 characters)
+
+# Marquee scrolling for long text
+scribbles now --width 25 --marquee
+# Output: (scrolls left to reveal full text over time)
+# t=0s:  Artist Name - Very L
+# t=5s:  y Long Track Name • A
+# t=10s: Track Name • Artist N
 ```
 
 Exit codes:
@@ -243,6 +256,67 @@ set -g status-right "#(scribbles now 2>/dev/null || echo '—                   
 The width is measured in display columns, accounting for Unicode characters
 like emoji. When output is longer than the specified width, it's truncated with
 "...". When shorter, it's padded with spaces.
+
+### Marquee Scrolling for Long Track Names
+
+For track names longer than the fixed width, you can enable marquee scrolling
+to reveal the full text over time instead of truncating it:
+
+```tmux
+# Enable marquee scrolling with the --marquee flag
+set -g status-right "♫ #(scribbles now --width 25 --marquee 2>/dev/null || echo '—                       ')"
+set -g status-interval 5
+```
+
+Or configure it globally in `~/.config/scribbles/config.yaml`:
+
+```yaml
+output_format: "🎵 {{.Name}} - {{.Artist}}"
+output_width: 25
+marquee_enabled: true
+marquee_speed: 2
+marquee_separator: " • "
+```
+
+Then use in tmux:
+
+```tmux
+set -g status-right "#(scribbles now 2>/dev/null || echo '—                       ')"
+```
+
+#### How Marquee Scrolling Works
+
+- **Short text** (fits within width): Displayed statically with padding (no
+  scrolling)
+- **Long text** (exceeds width): Scrolls left to reveal the full text over time
+- **Continuous loop**: Text wraps around with a separator (default: " • ")
+- **Deterministic**: Same timestamp produces same output (consistent across tmux
+  refreshes)
+
+#### Configuration Options
+
+- `marquee_enabled` (boolean, default: `false`): Enable marquee scrolling
+  globally
+- `marquee_speed` (integer, default: `2`): Scroll speed in characters per
+  second
+  - With tmux `status-interval: 5`, speed 2 = 10 characters per refresh
+  - Higher values scroll faster but may be harder to read
+  - Lower values scroll slower but are more readable
+- `marquee_separator` (string, default: `" • "`): Separator shown between the
+  end and beginning of the text
+
+#### Speed Tuning
+
+The visual scrolling effect depends on your tmux `status-interval`:
+
+- **status-interval: 5s**, **speed: 2** → 10 chars per update (recommended)
+- **status-interval: 5s**, **speed: 1** → 5 chars per update (slower, more
+  readable)
+- **status-interval: 5s**, **speed: 3** → 15 chars per update (faster, less
+  readable)
+
+Adjust `marquee_speed` based on your preferred refresh interval for optimal
+readability.
 
 ## How Scrobbling Works
 

@@ -169,6 +169,13 @@ func padToWidth(text string, width int) string {
 
 // extractWindow extracts a substring from text starting at startPos (in display columns)
 // and returns exactly 'width' display columns. Handles Unicode characters correctly.
+//
+// This helper is used by marqueeText to extract a sliding window from the extended text.
+// Position and width are measured in display columns (not runes), so emoji and CJK
+// characters are counted by their visual width (typically 2 columns).
+//
+// If the extracted text is shorter than width, it's padded with spaces to ensure
+// consistent output width.
 func extractWindow(text string, startPos int, width int) string {
 	if width <= 0 {
 		return ""
@@ -219,6 +226,27 @@ func extractWindow(text string, startPos int, width int) string {
 // marqueeText creates a scrolling marquee effect for text that exceeds the target width.
 // If text fits within width, returns static padded text.
 // If text is longer, creates a scrolling window using timestamp-based positioning.
+//
+// Algorithm:
+// 1. Create extended text: "original{separator}original" for continuous looping
+// 2. Calculate scroll position: time.Now().Unix() * speed % len(extended)
+//    - speed is in characters per second
+//    - position wraps around to create infinite loop
+//    - deterministic: same timestamp = same output (important for testing)
+// 3. Extract a window of exactly 'width' display columns starting at position
+// 4. Pad with spaces if needed to ensure exact width
+//
+// Interaction with tmux:
+// - tmux refreshes status bar at discrete intervals (status-interval, typically 5s)
+// - Each refresh calls this function with a new timestamp
+// - Creates step-animation effect (not smooth scrolling)
+// - Example: speed=2, interval=5s → advances 10 chars per visual update
+// - Users can tune speed based on their tmux interval for optimal readability
+//
+// Edge cases:
+// - Short text (fits in width): returns static padded text (no scrolling)
+// - Very long text: will eventually cycle through entire text
+// - Unicode/emoji: handled correctly using runewidth for display column calculation
 func marqueeText(text string, width int, speed int, separator string) string {
 	if width <= 0 {
 		return text
@@ -237,10 +265,15 @@ func marqueeText(text string, width int, speed int, separator string) string {
 	extendedRunes := []rune(extended)
 
 	// Calculate scroll position based on current time
+	// This creates a deterministic, timestamp-based scroll position that:
+	// - Advances continuously over time (speed chars/second)
+	// - Wraps around to create infinite loop (modulo totalChars)
+	// - Is stateless (no need to persist position between calls)
+	// - Is testable (can mock time.Now for unit tests)
 	now := time.Now().Unix()
-	// speed = characters per second
-	// Position wraps around the extended text length
 	totalChars := len(extendedRunes)
+	// Position = (current_unix_time * chars_per_second) % total_chars
+	// Example: speed=2, time=10s → position = 20 % totalChars
 	position := int(now*int64(speed)) % totalChars
 
 	// Build the window starting at position
