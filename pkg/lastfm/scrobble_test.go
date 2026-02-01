@@ -124,7 +124,9 @@ func TestScrobbleService_UpdateNowPlaying(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				if _, err := w.Write([]byte(tt.response)); err != nil {
+					t.Fatalf("failed to write response body: %v", err)
+				}
 			}))
 			defer server.Close()
 
@@ -201,7 +203,9 @@ func TestScrobbleService_Scrobble(t *testing.T) {
 	</scrobbles>
 </lfm>`
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(response))
+		if _, err := w.Write([]byte(response)); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -291,8 +295,8 @@ func TestScrobbleService_ScrobbleBatch(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name: "empty batch",
-			scrobbles: []Scrobble{},
+			name:         "empty batch",
+			scrobbles:    []Scrobble{},
 			wantAccepted: 0,
 			wantIgnored:  0,
 			wantErr:      false,
@@ -369,7 +373,9 @@ func TestScrobbleService_ScrobbleBatch(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				if _, err := w.Write([]byte(tt.response)); err != nil {
+					t.Fatalf("failed to write response body: %v", err)
+				}
 			}))
 			defer server.Close()
 
@@ -439,7 +445,9 @@ func TestScrobbleService_ScrobbleBatch_MaxBatchSize(t *testing.T) {
 	</scrobbles>
 </lfm>`
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(response))
+		if _, err := w.Write([]byte(response)); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -531,7 +539,9 @@ func TestScrobbleService_ContextCancellation(t *testing.T) {
 		// Simulate slow server
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`<lfm status="ok"><scrobbles accepted="1" ignored="0"></scrobbles></lfm>`))
+		if _, err := w.Write([]byte(`<lfm status="ok"><scrobbles accepted="1" ignored="0"></scrobbles></lfm>`)); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	}))
 	defer server.Close()
 

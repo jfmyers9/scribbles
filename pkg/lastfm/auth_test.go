@@ -83,7 +83,9 @@ func TestAuthService_GetToken(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				if _, err := w.Write([]byte(tt.response)); err != nil {
+					t.Fatalf("failed to write response body: %v", err)
+				}
 			}))
 			defer server.Close()
 
@@ -233,7 +235,9 @@ func TestAuthService_GetSession(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				if _, err := w.Write([]byte(tt.response)); err != nil {
+					t.Fatalf("failed to write response body: %v", err)
+				}
 			}))
 			defer server.Close()
 
@@ -282,10 +286,12 @@ func TestAuthService_GetToken_ContextCancellation(t *testing.T) {
 		// Simulate slow response
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
+		if _, err := w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
 <lfm status="ok">
 	<token>test-token</token>
-</lfm>`))
+</lfm>`)); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -317,14 +323,16 @@ func TestAuthService_GetSession_ContextCancellation(t *testing.T) {
 		// Simulate slow response
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
+		if _, err := w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
 <lfm status="ok">
 	<session>
 		<name>test</name>
 		<key>test-key</key>
 		<subscriber>0</subscriber>
 	</session>
-</lfm>`))
+</lfm>`)); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -358,17 +366,21 @@ func TestAuthService_Retry(t *testing.T) {
 		if attempts < 3 {
 			// First two attempts return temporary error
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
+			if _, err := w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
 <lfm status="failed">
 	<error code="11">Service Offline</error>
-</lfm>`))
+</lfm>`)); err != nil {
+				t.Fatalf("failed to write response body: %v", err)
+			}
 		} else {
 			// Third attempt succeeds
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
+			if _, err := w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
 <lfm status="ok">
 	<token>test-token-retry</token>
-</lfm>`))
+</lfm>`)); err != nil {
+				t.Fatalf("failed to write response body: %v", err)
+			}
 		}
 	}))
 	defer server.Close()
@@ -406,14 +418,18 @@ func TestAuthService_ServerError(t *testing.T) {
 		if attempts < 3 {
 			// First two attempts return 503
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("Service Unavailable"))
+			if _, err := w.Write([]byte("Service Unavailable")); err != nil {
+				t.Fatalf("failed to write response body: %v", err)
+			}
 		} else {
 			// Third attempt succeeds
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
+			if _, err := w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
 <lfm status="ok">
 	<token>test-token-503</token>
-</lfm>`))
+</lfm>`)); err != nil {
+				t.Fatalf("failed to write response body: %v", err)
+			}
 		}
 	}))
 	defer server.Close()

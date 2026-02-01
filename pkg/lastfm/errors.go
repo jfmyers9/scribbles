@@ -79,28 +79,3 @@ var (
 	// ErrInvalidConfig is returned when client configuration is invalid.
 	ErrInvalidConfig = fmt.Errorf("lastfm: invalid configuration")
 )
-
-// isRetryableError determines if an error should trigger a retry.
-//
-// This is used internally by the transport layer to implement
-// retry logic with exponential backoff.
-func isRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check if it's a Last.fm API error
-	var lastfmErr *Error
-	if e, ok := err.(*Error); ok {
-		lastfmErr = e
-	}
-
-	if lastfmErr != nil {
-		return lastfmErr.Temporary()
-	}
-
-	// Network errors are generally retryable but are not
-	// represented by *Error. The transport layer handles
-	// network error retry separately.
-	return false
-}

@@ -79,9 +79,9 @@ func (s *ScrobbleService) UpdateNowPlaying(ctx context.Context, track Track) (*N
 // Scrobble submits a single scrobble to Last.fm.
 //
 // A track should only be scrobbled when:
-// - The track is longer than 30 seconds, AND
-// - The track has been played for at least 50% of its duration OR 4 minutes
-//   (whichever comes first)
+//   - The track is longer than 30 seconds, AND
+//   - The track has been played for at least 50% of its duration OR 4 minutes
+//     (whichever comes first)
 //
 // Requires authentication (session key must be set via SetSessionKey).
 //
@@ -193,10 +193,10 @@ func (s *ScrobbleService) ScrobbleBatch(ctx context.Context, scrobbles []Scrobbl
 
 // nowPlayingResponse represents the XML response from track.updateNowPlaying.
 type nowPlayingResponse struct {
-	Artist      string `xml:"nowplaying>artist"`
-	Track       string `xml:"nowplaying>track"`
-	Album       string `xml:"nowplaying>album"`
-	AlbumArtist string `xml:"nowplaying>albumArtist"`
+	Artist         string `xml:"nowplaying>artist"`
+	Track          string `xml:"nowplaying>track"`
+	Album          string `xml:"nowplaying>album"`
+	AlbumArtist    string `xml:"nowplaying>albumArtist"`
 	IgnoredMessage struct {
 		Code int    `xml:"code,attr"`
 		Text string `xml:",chardata"`
@@ -234,10 +234,10 @@ type scrobbleResponse struct {
 		Accepted  string `xml:"accepted,attr"`
 		Ignored   string `xml:"ignored,attr"`
 		Scrobbles []struct {
-			Artist    string `xml:"artist"`
-			Track     string `xml:"track"`
-			Album     string `xml:"album"`
-			Timestamp string `xml:"timestamp"`
+			Artist         string `xml:"artist"`
+			Track          string `xml:"track"`
+			Album          string `xml:"album"`
+			Timestamp      string `xml:"timestamp"`
 			IgnoredMessage struct {
 				Code int    `xml:"code,attr"`
 				Text string `xml:",chardata"`
@@ -260,20 +260,24 @@ func unmarshalScrobbles(data []byte) (*ScrobbleResponse, error) {
 	accepted := 0
 	ignored := 0
 	if resp.Scrobbles.Accepted != "" {
-		fmt.Sscanf(resp.Scrobbles.Accepted, "%d", &accepted)
+		if _, err := fmt.Sscanf(resp.Scrobbles.Accepted, "%d", &accepted); err != nil {
+			return nil, err
+		}
 	}
 	if resp.Scrobbles.Ignored != "" {
-		fmt.Sscanf(resp.Scrobbles.Ignored, "%d", &ignored)
+		if _, err := fmt.Sscanf(resp.Scrobbles.Ignored, "%d", &ignored); err != nil {
+			return nil, err
+		}
 	}
 
 	result := &ScrobbleResponse{
-		Accepted:  accepted,
-		Ignored:   ignored,
+		Accepted: accepted,
+		Ignored:  ignored,
 		Scrobbles: make([]struct {
-			Artist    string
-			Track     string
-			Album     string
-			Timestamp int64
+			Artist         string
+			Track          string
+			Album          string
+			Timestamp      int64
 			IgnoredMessage struct {
 				Code int
 				Text string
@@ -284,7 +288,9 @@ func unmarshalScrobbles(data []byte) (*ScrobbleResponse, error) {
 	for i, s := range resp.Scrobbles.Scrobbles {
 		var timestamp int64
 		if s.Timestamp != "" {
-			fmt.Sscanf(s.Timestamp, "%d", &timestamp)
+			if _, err := fmt.Sscanf(s.Timestamp, "%d", &timestamp); err != nil {
+				return nil, err
+			}
 		}
 
 		result.Scrobbles[i].Artist = s.Artist
