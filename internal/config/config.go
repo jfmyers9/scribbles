@@ -9,11 +9,14 @@ import (
 )
 
 type Config struct {
-	OutputFormat string
-	OutputWidth  int
-	PollInterval int
-	LastFM       LastFMConfig
-	Logging      LoggingConfig
+	OutputFormat      string
+	OutputWidth       int
+	PollInterval      int
+	MarqueeEnabled    bool
+	MarqueeSpeed      int
+	MarqueeSeparator  string
+	LastFM            LastFMConfig
+	Logging           LoggingConfig
 }
 
 type LoggingConfig struct {
@@ -40,6 +43,9 @@ func Load() (*Config, error) {
 	v.SetDefault("output_format", "{{.Artist}} - {{.Name}}")
 	v.SetDefault("output_width", 0)
 	v.SetDefault("poll_interval", 3)
+	v.SetDefault("marquee_enabled", false)
+	v.SetDefault("marquee_speed", 2)
+	v.SetDefault("marquee_separator", " • ")
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.file", "")
 
@@ -49,9 +55,12 @@ func Load() (*Config, error) {
 	v.AutomaticEnv()
 
 	cfg := &Config{
-		OutputFormat: v.GetString("output_format"),
-		OutputWidth:  v.GetInt("output_width"),
-		PollInterval: v.GetInt("poll_interval"),
+		OutputFormat:     v.GetString("output_format"),
+		OutputWidth:      v.GetInt("output_width"),
+		PollInterval:     v.GetInt("poll_interval"),
+		MarqueeEnabled:   v.GetBool("marquee_enabled"),
+		MarqueeSpeed:     v.GetInt("marquee_speed"),
+		MarqueeSeparator: v.GetString("marquee_separator"),
 		LastFM: LastFMConfig{
 			APIKey:     v.GetString("lastfm.api_key"),
 			APISecret:  v.GetString("lastfm.api_secret"),
@@ -145,6 +154,9 @@ func (c *Config) Save() error {
 	v.Set("output_format", c.OutputFormat)
 	v.Set("output_width", c.OutputWidth)
 	v.Set("poll_interval", c.PollInterval)
+	v.Set("marquee_enabled", c.MarqueeEnabled)
+	v.Set("marquee_speed", c.MarqueeSpeed)
+	v.Set("marquee_separator", c.MarqueeSeparator)
 	v.Set("lastfm.api_key", c.LastFM.APIKey)
 	v.Set("lastfm.api_secret", c.LastFM.APISecret)
 	v.Set("lastfm.session_key", c.LastFM.SessionKey)

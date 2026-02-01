@@ -40,6 +40,8 @@ func init() {
 	nowCmd.Flags().StringP("format", "f", "", "Output format template (overrides config)")
 	// Add width flag to set fixed output width
 	nowCmd.Flags().IntP("width", "w", 0, "Fixed output width (0=disabled, overrides config)")
+	// Add marquee flag to enable scrolling
+	nowCmd.Flags().Bool("marquee", false, "Enable marquee scrolling for long text (overrides config)")
 }
 
 func runNow(cmd *cobra.Command, args []string) error {
@@ -80,13 +82,24 @@ func runNow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to format output: %w", err)
 	}
 
-	// Apply width padding if requested
+	// Apply width padding/marquee if requested
 	width, _ := cmd.Flags().GetInt("width")
 	if width == 0 {
 		width = cfg.OutputWidth
 	}
+
+	marquee, _ := cmd.Flags().GetBool("marquee")
+	if !marquee && !cmd.Flags().Changed("marquee") {
+		// Flag not set, use config default
+		marquee = cfg.MarqueeEnabled
+	}
+
 	if width > 0 {
-		output = padToWidth(output, width)
+		if marquee {
+			output = marqueeText(output, width, cfg.MarqueeSpeed, cfg.MarqueeSeparator)
+		} else {
+			output = padToWidth(output, width)
+		}
 	}
 
 	fmt.Println(output)
@@ -152,4 +165,107 @@ func padToWidth(text string, width int) string {
 	}
 
 	return text // exactly the right width
+}
+
+// extractWindow extracts a substring from text starting at startPos (in display columns)
+// and returns exactly 'width' display columns. Handles Unicode characters correctly.
+func extractWindow(text string, startPos int, width int) string {
+	if width <= 0 {
+		return ""
+	}
+
+	runes := []rune(text)
+	var result []rune
+	currentPos := 0
+	resultWidth := 0
+
+	// Skip to start position
+	for i := 0; i < len(runes) && currentPos < startPos; i++ {
+		currentPos += runewidth.RuneWidth(runes[i])
+	}
+
+	// Collect runes until we reach the target width
+	for i := 0; i < len(runes) && resultWidth < width; {
+		// Skip past runes we've already processed to reach startPos
+		runePos := 0
+		for j := 0; j < i; j++ {
+			runePos += runewidth.RuneWidth(runes[j])
+		}
+
+		if runePos >= startPos {
+			r := runes[i]
+			rw := runewidth.RuneWidth(r)
+
+			// Don't exceed target width
+			if resultWidth+rw <= width {
+				result = append(result, r)
+				resultWidth += rw
+			} else {
+				break
+			}
+		}
+		i++
+	}
+
+	// Pad with spaces if we haven't reached target width
+	if resultWidth < width {
+		padding := strings.Repeat(" ", width-resultWidth)
+		return string(result) + padding
+	}
+
+	return string(result)
+}
+
+// marqueeText creates a scrolling marquee effect for text that exceeds the target width.
+// If text fits within width, returns static padded text.
+// If text is longer, creates a scrolling window using timestamp-based positioning.
+func marqueeText(text string, width int, speed int, separator string) string {
+	if width <= 0 {
+		return text
+	}
+
+	textWidth := runewidth.StringWidth(text)
+
+	// If text fits, just pad normally (no scrolling needed)
+	if textWidth <= width {
+		return padToWidth(text, width)
+	}
+
+	// Create extended text: "original + separator + original"
+	// This creates a continuous loop
+	extended := text + separator + text
+	extendedRunes := []rune(extended)
+
+	// Calculate scroll position based on current time
+	now := time.Now().Unix()
+	// speed = characters per second
+	// Position wraps around the extended text length
+	totalChars := len(extendedRunes)
+	position := int(now*int64(speed)) % totalChars
+
+	// Build the window starting at position
+	var result []rune
+	resultWidth := 0
+
+	for i := 0; i < totalChars && resultWidth < width; i++ {
+		idx := (position + i) % totalChars
+		r := extendedRunes[idx]
+		rw := runewidth.RuneWidth(r)
+
+		// Don't exceed target width
+		if resultWidth+rw <= width {
+			result = append(result, r)
+			resultWidth += rw
+		} else {
+			break
+		}
+	}
+
+	// Pad with spaces if needed to reach exact width
+	if resultWidth < width {
+		padding := strings.Repeat(" ", width-resultWidth)
+		return string(result) + padding
+	}
+
+	return string(result)
 }
