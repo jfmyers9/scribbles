@@ -45,4 +45,19 @@ type Client interface {
 
 	// IsRunning checks if the music player application is running
 	IsRunning(ctx context.Context) (bool, error)
+
+	// Play resumes playback
+	Play(ctx context.Context) error
+
+	// Pause pauses playback
+	Pause(ctx context.Context) error
+
+	// PlayPause toggles between play and pause
+	PlayPause(ctx context.Context) error
+
+	// NextTrack skips to the next track
+	NextTrack(ctx context.Context) error
+
+	// PreviousTrack goes to the previous track
+	PreviousTrack(ctx context.Context) error
 }

@@ -32,6 +32,9 @@ type Daemon struct {
 	state    *State
 	poller   *Poller
 	logger   zerolog.Logger
+
+	// TUI support
+	tuiUpdates chan TrackUpdate // Channel for TUI to receive updates
 }
 
 // New creates a new Daemon instance
@@ -144,6 +147,15 @@ func (d *Daemon) handleUpdates(ctx context.Context, updates <-chan TrackUpdate) 
 		case <-ctx.Done():
 			return
 		case update := <-updates:
+			// Forward to TUI if enabled (non-blocking)
+			if d.tuiUpdates != nil {
+				select {
+				case d.tuiUpdates <- update:
+				default:
+					// TUI channel full, skip update
+				}
+			}
+
 			if update.Err != nil {
 				// Log error but continue
 				d.logger.Debug().Err(update.Err).Msg("Track update error")
@@ -385,4 +397,30 @@ func (d *Daemon) Shutdown() error {
 	}
 
 	return nil
+}
+
+// EnableTUI creates and returns a channel for the TUI to receive track updates
+func (d *Daemon) EnableTUI() <-chan TrackUpdate {
+	d.tuiUpdates = make(chan TrackUpdate, 10)
+	return d.tuiUpdates
+}
+
+// GetState returns the current track state
+func (d *Daemon) GetState() TrackState {
+	return d.state.GetState()
+}
+
+// GetPlayedDuration returns how long the current track has been played
+func (d *Daemon) GetPlayedDuration() time.Duration {
+	return d.state.GetPlayedDuration()
+}
+
+// GetPendingCount returns the number of pending scrobbles
+func (d *Daemon) GetPendingCount() int {
+	ctx := context.Background()
+	pending, err := d.queue.GetPending(ctx, 1000)
+	if err != nil {
+		return 0
+	}
+	return len(pending)
 }

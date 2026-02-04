@@ -1,15 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/jfmyers9/scribbles/internal/config"
 	"github.com/jfmyers9/scribbles/internal/daemon"
 	"github.com/jfmyers9/scribbles/internal/music"
 	"github.com/jfmyers9/scribbles/internal/scrobbler"
+	"github.com/jfmyers9/scribbles/internal/tui"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 )
@@ -18,6 +21,7 @@ var (
 	daemonLogFile  string
 	daemonLogLevel string
 	daemonDataDir  string
+	daemonTUI      bool
 )
 
 // daemonCmd represents the daemon command
@@ -44,6 +48,7 @@ func init() {
 	daemonCmd.Flags().StringVar(&daemonLogFile, "log-file", "", "Log file path (default: stderr)")
 	daemonCmd.Flags().StringVar(&daemonLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	daemonCmd.Flags().StringVar(&daemonDataDir, "data-dir", "", "Data directory for state and queue (default: ~/.local/share/scribbles)")
+	daemonCmd.Flags().BoolVar(&daemonTUI, "tui", false, "Enable terminal UI for now playing display")
 }
 
 func runDaemon(cmd *cobra.Command, args []string) error {
@@ -111,6 +116,12 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create daemon: %w", err)
 	}
 
+	// Enable TUI if flag is set OR config has it enabled
+	enableTUI := daemonTUI || cfg.TUI.Enabled
+	if enableTUI {
+		return runDaemonWithTUI(d, musicClient, cfg, logger)
+	}
+
 	if err := d.Run(); err != nil {
 		return fmt.Errorf("daemon error: %w", err)
 	}
@@ -122,6 +133,57 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 
 	logger.Info().Msg("Daemon stopped")
 	return nil
+}
+
+func runDaemonWithTUI(d *daemon.Daemon, musicClient music.Client, cfg *config.Config, logger zerolog.Logger) error {
+	// Enable TUI updates channel
+	updates := d.EnableTUI()
+
+	// Create TUI config from app config
+	tuiCfg := tui.Config{
+		RefreshRate: time.Duration(cfg.TUI.RefreshRate) * time.Millisecond,
+		Theme:       cfg.TUI.Theme,
+	}
+
+	// Create TUI application with config
+	tuiApp := tui.NewWithConfig(tuiCfg)
+	tuiApp.SetMusicClient(musicClient)
+
+	// Create context for daemon
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var wg sync.WaitGroup
+
+	// Run daemon in background
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := d.Run(); err != nil {
+			logger.Error().Err(err).Msg("Daemon error")
+		}
+		// When daemon stops, stop TUI
+		tuiApp.Stop()
+	}()
+
+	// Run TUI (blocks until user quits)
+	err := tuiApp.Run(ctx, updates, d.GetState, d.GetPlayedDuration)
+
+	// Cancel context to signal daemon to stop
+	cancel()
+
+	// Wait for daemon to finish
+	wg.Wait()
+
+	// Shutdown daemon
+	if shutdownErr := d.Shutdown(); shutdownErr != nil {
+		logger.Error().Err(shutdownErr).Msg("Error during shutdown")
+		if err == nil {
+			err = shutdownErr
+		}
+	}
+
+	logger.Info().Msg("Daemon stopped")
+	return err
 }
 
 func setupLogger(logFile, logLevel string) zerolog.Logger {

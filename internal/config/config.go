@@ -9,14 +9,21 @@ import (
 )
 
 type Config struct {
-	OutputFormat      string
-	OutputWidth       int
-	PollInterval      int
-	MarqueeEnabled    bool
-	MarqueeSpeed      int
-	MarqueeSeparator  string
-	LastFM            LastFMConfig
-	Logging           LoggingConfig
+	OutputFormat     string
+	OutputWidth      int
+	PollInterval     int
+	MarqueeEnabled   bool
+	MarqueeSpeed     int
+	MarqueeSeparator string
+	LastFM           LastFMConfig
+	Logging          LoggingConfig
+	TUI              TUIConfig
+}
+
+type TUIConfig struct {
+	Enabled     bool   // Enable TUI by default when running daemon
+	RefreshRate int    // Refresh rate in milliseconds (default 500)
+	Theme       string // Color theme: "default", "minimal", "colorful"
 }
 
 type LoggingConfig struct {
@@ -48,6 +55,9 @@ func Load() (*Config, error) {
 	v.SetDefault("marquee_separator", " • ")
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.file", "")
+	v.SetDefault("tui.enabled", false)
+	v.SetDefault("tui.refresh_rate", 500)
+	v.SetDefault("tui.theme", "default")
 
 	_ = v.ReadInConfig()
 
@@ -69,6 +79,11 @@ func Load() (*Config, error) {
 		Logging: LoggingConfig{
 			Level: v.GetString("logging.level"),
 			File:  v.GetString("logging.file"),
+		},
+		TUI: TUIConfig{
+			Enabled:     v.GetBool("tui.enabled"),
+			RefreshRate: v.GetInt("tui.refresh_rate"),
+			Theme:       v.GetString("tui.theme"),
 		},
 	}
 
@@ -162,6 +177,9 @@ func (c *Config) Save() error {
 	v.Set("lastfm.session_key", c.LastFM.SessionKey)
 	v.Set("logging.level", c.Logging.Level)
 	v.Set("logging.file", c.Logging.File)
+	v.Set("tui.enabled", c.TUI.Enabled)
+	v.Set("tui.refresh_rate", c.TUI.RefreshRate)
+	v.Set("tui.theme", c.TUI.Theme)
 
 	return v.WriteConfigAs(configFile)
 }
