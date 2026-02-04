@@ -28,10 +28,11 @@ jobs:
       - name: Build binaries
         run: ./scripts/build.sh
 
-      - name: Create Release Notes
+      - name: Extract Release Notes
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
-          sed "s/vX.Y.Z/$VERSION/g" RELEASE_NOTES.md > release-notes-$VERSION.md
+          # Extract section for this version from CHANGELOG.md
+          awk "/^## \[${VERSION#v}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release-notes-$VERSION.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
