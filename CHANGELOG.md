@@ -8,8 +8,20 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-04
+
 ### Added
 
+- Terminal UI for now playing visualization
+  - `scribbles tui` - Standalone TUI for quick visualization
+  - `scribbles daemon --tui` - Integrated TUI with scrobble tracking
+  - Now playing display with track name, artist, album, and play state
+  - Progress bar with real-time position
+  - Scrobble progress indicator showing percentage toward scrobble threshold
+  - Recent tracks panel with scrobble status
+  - Session stats display
+  - Keyboard controls: `q` (quit), `space` (play/pause), `n` (next), `p` (prev)
+  - Configurable via `tui.enabled`, `tui.refresh_rate`, `tui.theme`
 - Music control commands for Apple Music playback control
   - `scribbles play` - Resume playback
   - `scribbles pause` - Pause playback
@@ -20,6 +32,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   - `scribbles volume [0-100]` - Set playback volume
 - Tmux integration examples for keyboard-controlled music playback
 - Control methods in `AppleScriptClient` for playback control
+
+### Dependencies
+
+- Added `github.com/rivo/tview` for terminal UI
+- Added `github.com/gdamore/tcell/v2` for terminal handling
 
 ## [0.2.0] - 2026-01-31
 
@@ -61,6 +78,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - CLI integration for tmux status lines and other displays
 - Support for custom output formats with Go templates
 
-[unreleased]: https://github.com/jfmyers9/scribbles/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/jfmyers9/scribbles/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jfmyers9/scribbles/compare/v0.3.0...v0.4.0
 [0.2.0]: https://github.com/jfmyers9/scribbles/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jfmyers9/scribbles/releases/tag/v0.1.0
