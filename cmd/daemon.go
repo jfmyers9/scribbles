@@ -65,22 +65,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	logFile := daemonLogFile
-	if logFile == "" {
-		logFile = cfg.Logging.File
-	}
-
-	logLevel := daemonLogLevel
-	if !cmd.Flags().Changed("log-level") && cfg.Logging.Level != "" {
-		logLevel = cfg.Logging.Level
-	}
-
-	logger := setupLogger(logFile, logLevel)
-
-	logger.Info().
-		Str("version", "dev").
-		Msg("Starting scribbles daemon")
-
+	// Resolve data directory early so TUI mode can use it for log redirection
 	dataDir := daemonDataDir
 	if dataDir == "" {
 		homeDir, err := os.UserHomeDir()
@@ -93,6 +78,29 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
+
+	logFile := daemonLogFile
+	if logFile == "" {
+		logFile = cfg.Logging.File
+	}
+
+	// When TUI is active, logging to stderr corrupts tview's terminal.
+	// Redirect logs to a file so they are preserved but don't interfere.
+	enableTUI := daemonTUI || cfg.TUI.Enabled
+	if enableTUI && logFile == "" {
+		logFile = filepath.Join(dataDir, "daemon.log")
+	}
+
+	logLevel := daemonLogLevel
+	if !cmd.Flags().Changed("log-level") && cfg.Logging.Level != "" {
+		logLevel = cfg.Logging.Level
+	}
+
+	logger := setupLogger(logFile, logLevel)
+
+	logger.Info().
+		Str("version", "dev").
+		Msg("Starting scribbles daemon")
 
 	logger.Info().Str("data_dir", dataDir).Msg("Using data directory")
 
@@ -116,8 +124,6 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create daemon: %w", err)
 	}
 
-	// Enable TUI if flag is set OR config has it enabled
-	enableTUI := daemonTUI || cfg.TUI.Enabled
 	if enableTUI {
 		return runDaemonWithTUI(d, musicClient, cfg, logger)
 	}

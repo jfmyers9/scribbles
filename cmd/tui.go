@@ -50,22 +50,25 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	// Create tview application
 	app := tview.NewApplication()
 
-	// Create main layout components
+	// Create main layout components -- non-scrollable to prevent offset drift
 	nowPlaying := tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter)
+		SetTextAlign(tview.AlignCenter).
+		SetScrollable(false)
 	nowPlaying.SetBorder(true).
 		SetTitle(" Now Playing ").
 		SetTitleAlign(tview.AlignLeft)
 
 	progress := tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter)
+		SetTextAlign(tview.AlignCenter).
+		SetScrollable(false)
 	progress.SetBorder(true)
 
 	status := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
+		SetScrollable(false).
 		SetText("[gray]Press 'q' to quit | For scrobbling: scribbles daemon --tui[-]")
 
 	// Create layout using Flex
@@ -133,10 +136,12 @@ func runTUI(cmd *cobra.Command, args []string) error {
 
 			if npText != lastNowPlaying {
 				lastNowPlaying = npText
+				nowPlaying.Clear()
 				nowPlaying.SetText(npText)
 			}
 			if progText != lastProgress {
 				lastProgress = progText
+				progress.Clear()
 				progress.SetText(progText)
 			}
 		})

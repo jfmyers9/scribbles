@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -77,9 +78,9 @@ type App struct {
 	lastScrobble   string
 	lastRecent     string
 
-	// Cached progress bar width to stabilize change detection.
-	// Updated only when GetInnerRect returns a positive value.
-	lastBarWidth int
+	// Cached progress bar width. Written atomically from tview's event loop
+	// (inside QueueUpdateDraw), read from the ticker goroutine in buildProgressText.
+	lastBarWidth atomic.Int32
 
 	// Context cancel function
 	cancelFunc context.CancelFunc
@@ -108,40 +109,45 @@ func (a *App) SetMusicClient(client music.Client) {
 
 // setupUI creates the UI layout
 func (a *App) setupUI() {
-	// Now playing panel
+	// Now playing panel -- non-scrollable to prevent offset drift across redraws
 	a.nowPlaying = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter)
+		SetTextAlign(tview.AlignCenter).
+		SetScrollable(false)
 	a.nowPlaying.SetBorder(true).
 		SetTitle(" Now Playing ").
 		SetTitleAlign(tview.AlignLeft)
 
-	// Progress bar
+	// Progress bar -- non-scrollable
 	a.progress = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter)
+		SetTextAlign(tview.AlignCenter).
+		SetScrollable(false)
 	a.progress.SetBorder(true)
 
-	// Scrobble status
+	// Scrobble status -- non-scrollable
 	a.scrobble = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft)
+		SetTextAlign(tview.AlignLeft).
+		SetScrollable(false)
 	a.scrobble.SetBorder(true).
 		SetTitle(" Scrobble ").
 		SetTitleAlign(tview.AlignLeft)
 
-	// Recent tracks
+	// Recent tracks -- non-scrollable
 	a.recent = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft)
+		SetTextAlign(tview.AlignLeft).
+		SetScrollable(false)
 	a.recent.SetBorder(true).
 		SetTitle(" Recent ").
 		SetTitleAlign(tview.AlignLeft)
 
-	// Status bar
+	// Status bar -- non-scrollable
 	a.status = tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
+		SetScrollable(false).
 		SetText("[gray]q:quit  space:play/pause  n:next  p:prev[-]")
 
 	// Create layout
@@ -222,6 +228,11 @@ func (a *App) Run(ctx context.Context, updates <-chan daemon.TrackUpdate, stateG
 // It splits work into two goroutines: one consumes channel updates (state only),
 // and a single ticker drives all redraws to prevent queued redraw buildup.
 // All shared App fields are protected by a.mu.
+//
+// To avoid a race between the ticker's state snapshot and tview's deferred
+// QueueUpdateDraw execution, the ticker builds ALL display strings while
+// holding a.mu, then passes them as captured values to QueueUpdateDraw.
+// The closure on tview's event loop never re-acquires a.mu.
 func (a *App) handleUpdates(ctx context.Context, updates <-chan daemon.TrackUpdate, stateGetter func() daemon.TrackState, playedGetter func() time.Duration) {
 	var lastTrackName string
 
@@ -268,6 +279,9 @@ func (a *App) handleUpdates(ctx context.Context, updates <-chan daemon.TrackUpda
 			a.app.Stop()
 			return
 		case <-ticker.C:
+			// Build all display strings while holding the lock.
+			// This ensures the closure sent to QueueUpdateDraw captures
+			// a consistent snapshot -- no second lock acquisition needed.
 			a.mu.Lock()
 			if stateGetter != nil {
 				state := stateGetter()
@@ -279,8 +293,16 @@ func (a *App) handleUpdates(ctx context.Context, updates <-chan daemon.TrackUpda
 				}
 				a.lastScrobbled = a.trackState.Scrobbled
 			}
+
+			npText := a.buildNowPlayingText()
+			progText := a.buildProgressText(playedGetter)
+			scrobText := a.buildScrobbleText(playedGetter)
+			recentText := a.buildRecentText()
 			a.mu.Unlock()
-			a.refresh(playedGetter)
+
+			// Queue the redraw with pre-built strings. The closure
+			// only calls SetText -- it never touches a.mu.
+			a.refresh(npText, progText, scrobText, recentText)
 		}
 	}
 }
@@ -324,79 +346,100 @@ func (a *App) getRecentTracks() []RecentTrack {
 	return result
 }
 
-// refresh updates all UI components
-func (a *App) refresh(playedGetter func() time.Duration) {
+// refresh queues a redraw with pre-built display strings.
+// The closure only calls SetText on each panel -- it never acquires a.mu,
+// so there is no risk of seeing state that changed after the snapshot.
+func (a *App) refresh(npText, progText, scrobText, recentText string) {
+	// Capture the last-rendered strings by value so the change-detection
+	// comparison happens on tview's event loop (where SetText is safe).
+	lastNP := a.lastNowPlaying
+	lastProg := a.lastProgress
+	lastScrob := a.lastScrobble
+	lastRec := a.lastRecent
+
 	a.app.QueueUpdateDraw(func() {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-
-		a.updateNowPlaying()
-		a.updateProgress(playedGetter)
-		a.updateScrobbleStatus(playedGetter)
-		a.updateRecentTracks()
-	})
-}
-
-// updateNowPlaying updates the now playing panel
-func (a *App) updateNowPlaying() {
-	var text string
-
-	if a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
-		text = "\n\n[gray]No track playing[-]"
-	} else {
-		var sb strings.Builder
-		sb.WriteString("\n")
-		sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(a.currentTrack.Name)))
-		sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(a.currentTrack.Artist)))
-		sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(a.currentTrack.Album)))
-
-		// Play state indicator
-		stateIcon := "[green]\u25B6[-]" // Play triangle
-		if a.currentTrack.State == music.StatePaused {
-			stateIcon = "[yellow]\u23F8[-]" // Pause icon
-		}
-		sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
-		text = sb.String()
-	}
-
-	if text != a.lastNowPlaying {
-		a.lastNowPlaying = text
-		a.nowPlaying.SetText(text)
-	}
-}
-
-// updateProgress updates the progress bar
-func (a *App) updateProgress(playedGetter func() time.Duration) {
-	var text string
-
-	if a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
-		text = ""
-	} else {
+		// Sample the progress bar's inner width on tview's event loop
+		// (the only safe place to call GetInnerRect) and store it
+		// atomically for the next ticker cycle's buildProgressText call.
 		_, _, width, _ := a.progress.GetInnerRect()
 		barWidth := width - 14 // Account for time display
-		// Only update cached width when GetInnerRect returns a positive value,
-		// avoiding flicker from transient zero-width during layout.
 		if barWidth > 0 {
-			a.lastBarWidth = barWidth
-		}
-		if a.lastBarWidth < 10 {
-			a.lastBarWidth = 10
+			a.lastBarWidth.Store(int32(barWidth))
 		}
 
-		progressBar := buildProgressBar(a.currentTrack.Position, a.currentTrack.Duration, a.lastBarWidth)
-		posStr := formatDuration(a.currentTrack.Position)
-		durStr := formatDuration(a.currentTrack.Duration)
-		text = fmt.Sprintf("%s %s %s", posStr, progressBar, durStr)
-	}
+		if npText != lastNP {
+			a.nowPlaying.Clear()
+			a.nowPlaying.SetText(npText)
+		}
+		if progText != lastProg {
+			a.progress.Clear()
+			a.progress.SetText(progText)
+		}
+		if scrobText != lastScrob {
+			a.scrobble.Clear()
+			a.scrobble.SetText(scrobText)
+		}
+		if recentText != lastRec {
+			a.recent.Clear()
+			a.recent.SetText(recentText)
+		}
+	})
 
-	if text != a.lastProgress {
-		a.lastProgress = text
-		a.progress.SetText(text)
-	}
+	// Update the caches. These fields are only accessed from the ticker
+	// goroutine (the sole caller of refresh), so no lock is needed.
+	a.lastNowPlaying = npText
+	a.lastProgress = progText
+	a.lastScrobble = scrobText
+	a.lastRecent = recentText
 }
 
-// updateScrobbleStatus updates the scrobble status panel
-func (a *App) updateScrobbleStatus(playedGetter func() time.Duration) {
+// buildNowPlayingText returns the rendered string for the now-playing panel.
+// Must be called with a.mu held.
+func (a *App) buildNowPlayingText() string {
+	if a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
+		return "\n\n[gray]No track playing[-]"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(a.currentTrack.Name)))
+	sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(a.currentTrack.Artist)))
+	sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(a.currentTrack.Album)))
+
+	// Play state indicator
+	stateIcon := "[green]\u25B6[-]" // Play triangle
+	if a.currentTrack.State == music.StatePaused {
+		stateIcon = "[yellow]\u23F8[-]" // Pause icon
+	}
+	sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
+	return sb.String()
+}
+
+// buildProgressText returns the rendered string for the progress bar.
+// Must be called with a.mu held.
+func (a *App) buildProgressText(playedGetter func() time.Duration) string {
+	if a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
+		return ""
+	}
+
+	// Use the cached bar width; it will be refreshed once tview reports
+	// a positive inner width via the first QueueUpdateDraw that calls
+	// GetInnerRect on tview's event loop.  We bootstrap with lastBarWidth
+	// from the previous frame.
+	barWidth := int(a.lastBarWidth.Load())
+	if barWidth < 10 {
+		barWidth = 10
+	}
+
+	progressBar := buildProgressBar(a.currentTrack.Position, a.currentTrack.Duration, barWidth)
+	posStr := formatDuration(a.currentTrack.Position)
+	durStr := formatDuration(a.currentTrack.Duration)
+	return fmt.Sprintf("%s %s %s", posStr, progressBar, durStr)
+}
+
+// buildScrobbleText returns the rendered string for the scrobble panel.
+// Must be called with a.mu held.
+func (a *App) buildScrobbleText(playedGetter func() time.Duration) string {
 	var sb strings.Builder
 
 	if a.trackState == nil || a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
@@ -432,15 +475,12 @@ func (a *App) updateScrobbleStatus(playedGetter func() time.Duration) {
 		sb.WriteString(fmt.Sprintf("Session: %s", formatDuration(time.Since(a.sessionStart))))
 	}
 
-	text := sb.String()
-	if text != a.lastScrobble {
-		a.lastScrobble = text
-		a.scrobble.SetText(text)
-	}
+	return sb.String()
 }
 
-// updateRecentTracks updates the recent tracks panel
-func (a *App) updateRecentTracks() {
+// buildRecentText returns the rendered string for the recent-tracks panel.
+// Must be called with a.mu held.
+func (a *App) buildRecentText() string {
 	var sb strings.Builder
 
 	tracks := a.getRecentTracks()
@@ -468,11 +508,7 @@ func (a *App) updateRecentTracks() {
 		}
 	}
 
-	text := sb.String()
-	if text != a.lastRecent {
-		a.lastRecent = text
-		a.recent.SetText(text)
-	}
+	return sb.String()
 }
 
 // SetPendingCount updates the pending scrobble count
