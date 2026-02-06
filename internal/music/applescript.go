@@ -32,18 +32,15 @@ func (c *AppleScriptClient) IsRunning(ctx context.Context) (bool, error) {
 }
 
 // GetCurrentTrack returns the currently playing or paused track from Apple Music
+// This uses a single osascript call that checks if Music is running and queries
+// track data atomically, avoiding the overhead of two separate subprocess spawns.
 func (c *AppleScriptClient) GetCurrentTrack(ctx context.Context) (*Track, error) {
-	// First check if Music is running
-	running, err := c.IsRunning(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !running {
-		return nil, nil // Music not running, no track
-	}
-
-	// Query Music app for current track and player state
 	script := `
+tell application "System Events"
+	if not ((name of processes) contains "Music") then
+		return "not_running"
+	end if
+end tell
 tell application "Music"
 	if player state is stopped then
 		return "stopped"
@@ -71,8 +68,8 @@ end tell`
 
 	result := strings.TrimSpace(string(output))
 
-	// Handle stopped state
-	if result == "stopped" {
+	// Handle not running or stopped states
+	if result == "not_running" || result == "stopped" {
 		return nil, nil
 	}
 

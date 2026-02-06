@@ -19,11 +19,17 @@ type TrackState struct {
 	TotalPlayTime time.Duration // Accumulated play time (excludes pauses)
 }
 
+// defaultPersistInterval is the minimum time between throttled disk writes.
+const defaultPersistInterval = 5 * time.Second
+
 // State manages the daemon's state with thread-safe access and persistence
 type State struct {
-	mu       sync.RWMutex
-	current  TrackState
-	filePath string // Path to state file for persistence
+	mu              sync.RWMutex
+	current         TrackState
+	filePath        string        // Path to state file for persistence
+	dirty           bool          // Whether state has changed since last persist
+	lastPersist     time.Time     // Time of last successful persist
+	persistInterval time.Duration // Minimum interval between throttled persists
 }
 
 // persistedState is the JSON representation of state for disk storage
@@ -39,7 +45,8 @@ type persistedState struct {
 // If filePath is provided, attempts to restore state from disk
 func NewState(filePath string) (*State, error) {
 	s := &State{
-		filePath: filePath,
+		filePath:        filePath,
+		persistInterval: defaultPersistInterval,
 	}
 
 	// Try to restore state from disk if file exists
@@ -119,7 +126,7 @@ func (s *State) UpdatePosition(track *music.Track) error {
 		s.current = TrackState{}
 	}
 
-	return s.persist()
+	return s.throttledPersist()
 }
 
 // MarkScrobbled marks the current track as scrobbled
@@ -169,8 +176,8 @@ func (s *State) Reset() error {
 	return s.persist()
 }
 
-// persist saves the current state to disk
-// Must be called with lock held
+// persist saves the current state to disk unconditionally.
+// Must be called with lock held. Clears the dirty flag on success.
 func (s *State) persist() error {
 	if s.filePath == "" {
 		return nil // No persistence configured
@@ -201,7 +208,37 @@ func (s *State) persist() error {
 		return err
 	}
 
-	return os.Rename(tmpPath, s.filePath)
+	if err := os.Rename(tmpPath, s.filePath); err != nil {
+		return err
+	}
+
+	s.dirty = false
+	s.lastPersist = time.Now()
+	return nil
+}
+
+// throttledPersist marks state as dirty and only writes to disk if enough
+// time has elapsed since the last persist. Used for frequent, non-critical
+// updates like position changes to reduce disk I/O and mutex contention.
+// Must be called with lock held.
+func (s *State) throttledPersist() error {
+	s.dirty = true
+	if time.Since(s.lastPersist) < s.persistInterval {
+		return nil // Too soon, skip disk write
+	}
+	return s.persist()
+}
+
+// Flush persists state to disk if it has been modified since the last write.
+// Safe to call from outside -- acquires its own lock.
+func (s *State) Flush() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.dirty {
+		return nil
+	}
+	return s.persist()
 }
 
 // restore loads state from disk

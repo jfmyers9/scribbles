@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -51,16 +52,34 @@ type App struct {
 	// Music client for controls
 	musicClient music.Client
 
-	// Current state
+	// Mutex protects shared state accessed by both the channel consumer
+	// goroutine and the ticker goroutine in handleUpdates.
+	mu sync.Mutex
+
+	// Current state (guarded by mu)
 	currentTrack *music.Track
 	trackState   *daemon.TrackState
 	pendingCount int
 
-	// Session stats
+	// Session stats (guarded by mu)
 	sessionStart    time.Time
 	tracksPlayed    int
 	scrobblesSubmit int
-	recentTracks    []RecentTrack
+	lastScrobbled   bool // tracks scrobble transition for accurate counting
+
+	// Ring buffer for recent tracks (avoids allocation on every track change)
+	recentBuf   [maxRecentTracks]RecentTrack
+	recentCount int // total tracks added (recentCount % maxRecentTracks = next write index)
+
+	// Last-rendered content for change detection
+	lastNowPlaying string
+	lastProgress   string
+	lastScrobble   string
+	lastRecent     string
+
+	// Cached progress bar width to stabilize change detection.
+	// Updated only when GetInnerRect returns a positive value.
+	lastBarWidth int
 
 	// Context cancel function
 	cancelFunc context.CancelFunc
@@ -77,7 +96,6 @@ func NewWithConfig(cfg Config) *App {
 		app:          tview.NewApplication(),
 		config:       cfg,
 		sessionStart: time.Now(),
-		recentTracks: make([]RecentTrack, 0, maxRecentTracks),
 	}
 	a.setupUI()
 	return a
@@ -200,9 +218,43 @@ func (a *App) Run(ctx context.Context, updates <-chan daemon.TrackUpdate, stateG
 	return nil
 }
 
-// handleUpdates processes track updates and refreshes the display
+// handleUpdates processes track updates and refreshes the display.
+// It splits work into two goroutines: one consumes channel updates (state only),
+// and a single ticker drives all redraws to prevent queued redraw buildup.
+// All shared App fields are protected by a.mu.
 func (a *App) handleUpdates(ctx context.Context, updates <-chan daemon.TrackUpdate, stateGetter func() daemon.TrackState, playedGetter func() time.Duration) {
-	// Refresh ticker for progress bar updates (use config or default)
+	var lastTrackName string
+
+	// Channel consumer goroutine: updates track info but does NOT trigger redraws.
+	// The ticker goroutine is the sole caller of stateGetter() and refresh().
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case update := <-updates:
+				if update.Err != nil {
+					continue
+				}
+
+				a.mu.Lock()
+				// Check for track change
+				if update.Track != nil && update.Track.Name != lastTrackName {
+					// Add previous track to recent list
+					if a.currentTrack != nil && lastTrackName != "" {
+						a.addToRecentTracks(a.currentTrack, a.trackState)
+						a.tracksPlayed++
+					}
+					lastTrackName = update.Track.Name
+				}
+
+				a.currentTrack = update.Track
+				a.mu.Unlock()
+			}
+		}
+	}()
+
+	// Single refresh ticker: the only source of redraws
 	refreshRate := a.config.RefreshRate
 	if refreshRate <= 0 {
 		refreshRate = 500 * time.Millisecond
@@ -210,50 +262,31 @@ func (a *App) handleUpdates(ctx context.Context, updates <-chan daemon.TrackUpda
 	ticker := time.NewTicker(refreshRate)
 	defer ticker.Stop()
 
-	var lastTrackName string
-
 	for {
 		select {
 		case <-ctx.Done():
 			a.app.Stop()
 			return
-		case update := <-updates:
-			if update.Err != nil {
-				continue
-			}
-
-			// Check for track change
-			if update.Track != nil && update.Track.Name != lastTrackName {
-				// Add previous track to recent list
-				if a.currentTrack != nil && lastTrackName != "" {
-					a.addToRecentTracks(a.currentTrack, a.trackState)
-					a.tracksPlayed++
-				}
-				lastTrackName = update.Track.Name
-			}
-
-			a.currentTrack = update.Track
-			state := stateGetter()
-			a.trackState = &state
-
-			// Update scrobble count
-			if a.trackState.Scrobbled {
-				a.scrobblesSubmit = a.tracksPlayed
-			}
-
-			a.refresh(playedGetter)
 		case <-ticker.C:
-			// Refresh progress bar
+			a.mu.Lock()
 			if stateGetter != nil {
 				state := stateGetter()
 				a.trackState = &state
+
+				// Increment scrobble count on transition from not-scrobbled to scrobbled
+				if a.trackState.Scrobbled && !a.lastScrobbled {
+					a.scrobblesSubmit++
+				}
+				a.lastScrobbled = a.trackState.Scrobbled
 			}
+			a.mu.Unlock()
 			a.refresh(playedGetter)
 		}
 	}
 }
 
-// addToRecentTracks adds a track to the recent tracks list
+// addToRecentTracks adds a track to the ring buffer of recent tracks.
+// Must be called with a.mu held.
 func (a *App) addToRecentTracks(track *music.Track, state *daemon.TrackState) {
 	if track == nil {
 		return
@@ -264,23 +297,39 @@ func (a *App) addToRecentTracks(track *music.Track, state *daemon.TrackState) {
 		scrobbled = state.Scrobbled
 	}
 
-	recent := RecentTrack{
+	// Write into ring buffer at the current position
+	idx := a.recentCount % maxRecentTracks
+	a.recentBuf[idx] = RecentTrack{
 		Name:      track.Name,
 		Artist:    track.Artist,
 		Scrobbled: scrobbled,
 		PlayedAt:  time.Now(),
 	}
+	a.recentCount++
+}
 
-	// Prepend to list, keep max size
-	a.recentTracks = append([]RecentTrack{recent}, a.recentTracks...)
-	if len(a.recentTracks) > maxRecentTracks {
-		a.recentTracks = a.recentTracks[:maxRecentTracks]
+// getRecentTracks returns recent tracks in most-recent-first order.
+// Must be called with a.mu held.
+func (a *App) getRecentTracks() []RecentTrack {
+	n := a.recentCount
+	if n > maxRecentTracks {
+		n = maxRecentTracks
 	}
+	result := make([]RecentTrack, n)
+	for i := 0; i < n; i++ {
+		// Walk backwards from the most recently written slot
+		idx := (a.recentCount - 1 - i) % maxRecentTracks
+		result[i] = a.recentBuf[idx]
+	}
+	return result
 }
 
 // refresh updates all UI components
 func (a *App) refresh(playedGetter func() time.Duration) {
 	a.app.QueueUpdateDraw(func() {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+
 		a.updateNowPlaying()
 		a.updateProgress(playedGetter)
 		a.updateScrobbleStatus(playedGetter)
@@ -290,44 +339,60 @@ func (a *App) refresh(playedGetter func() time.Duration) {
 
 // updateNowPlaying updates the now playing panel
 func (a *App) updateNowPlaying() {
+	var text string
+
 	if a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
-		a.nowPlaying.SetText("\n\n[gray]No track playing[-]")
-		return
+		text = "\n\n[gray]No track playing[-]"
+	} else {
+		var sb strings.Builder
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(a.currentTrack.Name)))
+		sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(a.currentTrack.Artist)))
+		sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(a.currentTrack.Album)))
+
+		// Play state indicator
+		stateIcon := "[green]\u25B6[-]" // Play triangle
+		if a.currentTrack.State == music.StatePaused {
+			stateIcon = "[yellow]\u23F8[-]" // Pause icon
+		}
+		sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
+		text = sb.String()
 	}
 
-	var sb strings.Builder
-	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(a.currentTrack.Name)))
-	sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(a.currentTrack.Artist)))
-	sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(a.currentTrack.Album)))
-
-	// Play state indicator
-	stateIcon := "[green]\u25B6[-]" // Play triangle
-	if a.currentTrack.State == music.StatePaused {
-		stateIcon = "[yellow]\u23F8[-]" // Pause icon
+	if text != a.lastNowPlaying {
+		a.lastNowPlaying = text
+		a.nowPlaying.SetText(text)
 	}
-	sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
-
-	a.nowPlaying.SetText(sb.String())
 }
 
 // updateProgress updates the progress bar
 func (a *App) updateProgress(playedGetter func() time.Duration) {
+	var text string
+
 	if a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
-		a.progress.SetText("")
-		return
+		text = ""
+	} else {
+		_, _, width, _ := a.progress.GetInnerRect()
+		barWidth := width - 14 // Account for time display
+		// Only update cached width when GetInnerRect returns a positive value,
+		// avoiding flicker from transient zero-width during layout.
+		if barWidth > 0 {
+			a.lastBarWidth = barWidth
+		}
+		if a.lastBarWidth < 10 {
+			a.lastBarWidth = 10
+		}
+
+		progressBar := buildProgressBar(a.currentTrack.Position, a.currentTrack.Duration, a.lastBarWidth)
+		posStr := formatDuration(a.currentTrack.Position)
+		durStr := formatDuration(a.currentTrack.Duration)
+		text = fmt.Sprintf("%s %s %s", posStr, progressBar, durStr)
 	}
 
-	_, _, width, _ := a.progress.GetInnerRect()
-	barWidth := width - 14 // Account for time display
-	if barWidth < 10 {
-		barWidth = 10
+	if text != a.lastProgress {
+		a.lastProgress = text
+		a.progress.SetText(text)
 	}
-
-	progressBar := buildProgressBar(a.currentTrack.Position, a.currentTrack.Duration, barWidth)
-	posStr := formatDuration(a.currentTrack.Position)
-	durStr := formatDuration(a.currentTrack.Duration)
-	a.progress.SetText(fmt.Sprintf("%s %s %s", posStr, progressBar, durStr))
 }
 
 // updateScrobbleStatus updates the scrobble status panel
@@ -338,75 +403,82 @@ func (a *App) updateScrobbleStatus(playedGetter func() time.Duration) {
 		sb.WriteString("[gray]No track[-]\n\n")
 		sb.WriteString(fmt.Sprintf("Pending: %d\n", a.pendingCount))
 		sb.WriteString(fmt.Sprintf("Session: %s", formatDuration(time.Since(a.sessionStart))))
-		a.scrobble.SetText(sb.String())
-		return
-	}
-
-	// Scrobble progress
-	if a.trackState.Scrobbled {
-		sb.WriteString("[green]\u2713 Scrobbled[-]\n")
-	} else if a.currentTrack.Duration > 0 && playedGetter != nil {
-		played := playedGetter()
-		threshold := a.currentTrack.Duration / 2
-		if threshold > 4*time.Minute {
-			threshold = 4 * time.Minute
-		}
-		progress := float64(played) / float64(threshold) * 100
-		if progress > 100 {
-			progress = 100
-		}
-
-		// Visual progress indicator
-		barWidth := 10
-		filled := int(progress / 100 * float64(barWidth))
-		bar := strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", barWidth-filled)
-		sb.WriteString(fmt.Sprintf("[yellow]%s %.0f%%[-]\n", bar, progress))
 	} else {
-		sb.WriteString("[gray]Waiting...[-]\n")
+		// Scrobble progress
+		if a.trackState.Scrobbled {
+			sb.WriteString("[green]\u2713 Scrobbled[-]\n")
+		} else if a.currentTrack.Duration > 0 && playedGetter != nil {
+			played := playedGetter()
+			threshold := a.currentTrack.Duration / 2
+			if threshold > 4*time.Minute {
+				threshold = 4 * time.Minute
+			}
+			progress := float64(played) / float64(threshold) * 100
+			if progress > 100 {
+				progress = 100
+			}
+
+			// Visual progress indicator
+			barWidth := 10
+			filled := int(progress / 100 * float64(barWidth))
+			bar := strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", barWidth-filled)
+			sb.WriteString(fmt.Sprintf("[yellow]%s %.0f%%[-]\n", bar, progress))
+		} else {
+			sb.WriteString("[gray]Waiting...[-]\n")
+		}
+
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf("Pending: %d\n", a.pendingCount))
+		sb.WriteString(fmt.Sprintf("Session: %s", formatDuration(time.Since(a.sessionStart))))
 	}
 
-	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("Pending: %d\n", a.pendingCount))
-	sb.WriteString(fmt.Sprintf("Session: %s", formatDuration(time.Since(a.sessionStart))))
-
-	a.scrobble.SetText(sb.String())
+	text := sb.String()
+	if text != a.lastScrobble {
+		a.lastScrobble = text
+		a.scrobble.SetText(text)
+	}
 }
 
 // updateRecentTracks updates the recent tracks panel
 func (a *App) updateRecentTracks() {
 	var sb strings.Builder
 
-	if len(a.recentTracks) == 0 {
+	tracks := a.getRecentTracks()
+	if len(tracks) == 0 {
 		sb.WriteString("[gray]No recent tracks[-]")
-		a.recent.SetText(sb.String())
-		return
+	} else {
+		for i, track := range tracks {
+			if i > 0 {
+				sb.WriteString("\n")
+			}
+
+			// Scrobble indicator
+			if track.Scrobbled {
+				sb.WriteString("[green]\u2713[-] ")
+			} else {
+				sb.WriteString("[red]\u2717[-] ")
+			}
+
+			// Truncate name if too long
+			name := track.Name
+			if len(name) > 20 {
+				name = name[:17] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("[white]%s[-]", tview.Escape(name)))
+		}
 	}
 
-	for i, track := range a.recentTracks {
-		if i > 0 {
-			sb.WriteString("\n")
-		}
-
-		// Scrobble indicator
-		if track.Scrobbled {
-			sb.WriteString("[green]\u2713[-] ")
-		} else {
-			sb.WriteString("[red]\u2717[-] ")
-		}
-
-		// Truncate name if too long
-		name := track.Name
-		if len(name) > 20 {
-			name = name[:17] + "..."
-		}
-		sb.WriteString(fmt.Sprintf("[white]%s[-]", tview.Escape(name)))
+	text := sb.String()
+	if text != a.lastRecent {
+		a.lastRecent = text
+		a.recent.SetText(text)
 	}
-
-	a.recent.SetText(sb.String())
 }
 
 // SetPendingCount updates the pending scrobble count
 func (a *App) SetPendingCount(count int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.pendingCount = count
 }
 

@@ -85,41 +85,60 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		return event
 	})
 
+	// Change detection caches
+	var lastNowPlaying string
+	var lastProgress string
+	var lastBarWidth int
+
 	// Update function to refresh display
 	updateDisplay := func(track *music.Track) {
 		app.QueueUpdateDraw(func() {
+			var npText string
+			var progText string
+
 			if track == nil || track.State == music.StateStopped {
-				nowPlaying.SetText("\n\n[gray]No track playing[-]")
-				progress.SetText("")
-				return
+				npText = "\n\n[gray]No track playing[-]"
+				progText = ""
+			} else {
+				// Build now playing text
+				var sb strings.Builder
+				sb.WriteString("\n")
+				sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(track.Name)))
+				sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(track.Artist)))
+				sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(track.Album)))
+
+				// Add play state indicator
+				stateIcon := "[green]\u25B6[-]" // Play triangle
+				if track.State == music.StatePaused {
+					stateIcon = "[yellow]\u23F8[-]" // Pause icon
+				}
+				sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
+				npText = sb.String()
+
+				// Build progress bar with cached width to avoid flicker
+				_, _, width, _ := progress.GetInnerRect()
+				barWidth := width - 14
+				// Only update cached width when GetInnerRect returns a positive value
+				if barWidth > 0 {
+					lastBarWidth = barWidth
+				}
+				if lastBarWidth < 10 {
+					lastBarWidth = 10
+				}
+				progressBar := tuiBuildProgressBar(track.Position, track.Duration, lastBarWidth)
+				posStr := tuiFormatDuration(track.Position)
+				durStr := tuiFormatDuration(track.Duration)
+				progText = fmt.Sprintf("%s %s %s", posStr, progressBar, durStr)
 			}
 
-			// Build now playing text
-			var sb strings.Builder
-			sb.WriteString("\n")
-			sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(track.Name)))
-			sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(track.Artist)))
-			sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(track.Album)))
-
-			// Add play state indicator
-			stateIcon := "[green]\u25B6[-]" // Play triangle
-			if track.State == music.StatePaused {
-				stateIcon = "[yellow]\u23F8[-]" // Pause icon
+			if npText != lastNowPlaying {
+				lastNowPlaying = npText
+				nowPlaying.SetText(npText)
 			}
-			sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
-
-			nowPlaying.SetText(sb.String())
-
-			// Build progress bar
-			_, _, width, _ := progress.GetInnerRect()
-			barWidth := width - 14
-			if barWidth < 10 {
-				barWidth = 10
+			if progText != lastProgress {
+				lastProgress = progText
+				progress.SetText(progText)
 			}
-			progressBar := tuiBuildProgressBar(track.Position, track.Duration, barWidth)
-			posStr := tuiFormatDuration(track.Position)
-			durStr := tuiFormatDuration(track.Duration)
-			progress.SetText(fmt.Sprintf("%s %s %s", posStr, progressBar, durStr))
 		})
 	}
 
@@ -128,7 +147,12 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		const (
+			baseInterval = 1 * time.Second
+			maxInterval  = 16 * time.Second
+		)
+		interval := baseInterval
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		// Initial fetch
@@ -143,7 +167,20 @@ func runTUI(cmd *cobra.Command, args []string) error {
 				track, err := client.GetCurrentTrack(ctx)
 				if err != nil {
 					updateDisplay(nil)
+					// Exponential backoff on error
+					if interval < maxInterval {
+						interval *= 2
+						if interval > maxInterval {
+							interval = maxInterval
+						}
+						ticker.Reset(interval)
+					}
 					continue
+				}
+				// Reset to base interval on success
+				if interval != baseInterval {
+					interval = baseInterval
+					ticker.Reset(interval)
 				}
 				updateDisplay(track)
 			}

@@ -384,6 +384,11 @@ func (d *Daemon) processPendingScrobbles() {
 func (d *Daemon) Shutdown() error {
 	d.logger.Info().Msg("Shutting down daemon")
 
+	// Flush any dirty state to disk before shutdown
+	if err := d.state.Flush(); err != nil {
+		d.logger.Warn().Err(err).Msg("Failed to flush state on shutdown")
+	}
+
 	ctx := context.Background()
 
 	// Cleanup old records
