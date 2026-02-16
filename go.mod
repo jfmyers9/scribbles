@@ -1,6 +1,6 @@
 module github.com/jfmyers9/scribbles
 
-go 1.24.0
+go 1.26.0
 
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
