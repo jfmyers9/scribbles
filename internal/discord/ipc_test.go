@@ -9,8 +9,8 @@ import (
 
 func TestFrameRoundTrip(t *testing.T) {
 	client, server := net.Pipe()
-	defer client.Close()
-	defer server.Close()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
 
 	c := &ipcClient{conn: client}
 
@@ -50,8 +50,8 @@ func TestReadFrameLargePayload(t *testing.T) {
 	// Verify readFrame handles payloads larger than 512 bytes,
 	// which was the bug in the old library.
 	client, server := net.Pipe()
-	defer client.Close()
-	defer server.Close()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
 
 	c := &ipcClient{conn: server}
 
@@ -66,8 +66,8 @@ func TestReadFrameLargePayload(t *testing.T) {
 		header := make([]byte, 8)
 		binary.LittleEndian.PutUint32(header[0:4], opFrame)
 		binary.LittleEndian.PutUint32(header[4:8], uint32(len(large)))
-		client.Write(header)
-		client.Write(large)
+		_, _ = client.Write(header)
+		_, _ = client.Write(large)
 	}()
 
 	opcode, payload, err := c.readFrame()
@@ -84,8 +84,8 @@ func TestReadFrameLargePayload(t *testing.T) {
 
 func TestReadFrameHandshake(t *testing.T) {
 	client, server := net.Pipe()
-	defer client.Close()
-	defer server.Close()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
 
 	c := &ipcClient{conn: server}
 
@@ -94,8 +94,8 @@ func TestReadFrameHandshake(t *testing.T) {
 		header := make([]byte, 8)
 		binary.LittleEndian.PutUint32(header[0:4], opHandshake)
 		binary.LittleEndian.PutUint32(header[4:8], uint32(len(payload)))
-		client.Write(header)
-		client.Write([]byte(payload))
+		_, _ = client.Write(header)
+		_, _ = client.Write([]byte(payload))
 	}()
 
 	opcode, data, err := c.readFrame()

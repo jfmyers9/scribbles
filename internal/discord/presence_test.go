@@ -30,7 +30,7 @@ func (f *fakeRPC) SetActivity(a Activity) error {
 	return nil
 }
 
-func (f *fakeRPC) Close() { f.closed = true }
+func (f *fakeRPC) Close() error { f.closed = true; return nil }
 
 func newTestPresence() (*Presence, *fakeRPC) {
 	fake := &fakeRPC{}
@@ -183,7 +183,7 @@ func TestRunStopsOnContextCancel(t *testing.T) {
 
 func TestActivityFields(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(itunesResponse{
+		_ = json.NewEncoder(w).Encode(itunesResponse{
 			Results: []itunesResult{
 				{ArtworkURL100: "https://example.com/art/100x100bb.jpg"},
 			},

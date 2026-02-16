@@ -10,7 +10,7 @@ import (
 
 func TestArtworkLookup_ReturnsUpscaledURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(itunesResponse{
+		_ = json.NewEncoder(w).Encode(itunesResponse{
 			Results: []itunesResult{
 				{ArtworkURL100: "https://example.com/art/100x100bb.jpg"},
 			},
@@ -32,7 +32,7 @@ func TestArtworkLookup_CachesResults(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		json.NewEncoder(w).Encode(itunesResponse{
+		_ = json.NewEncoder(w).Encode(itunesResponse{
 			Results: []itunesResult{
 				{ArtworkURL100: "https://example.com/art/100x100bb.jpg"},
 			},
@@ -54,7 +54,7 @@ func TestArtworkLookup_CachesResults(t *testing.T) {
 
 func TestArtworkLookup_EmptyOnNoResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(itunesResponse{Results: nil})
+		_ = json.NewEncoder(w).Encode(itunesResponse{Results: nil})
 	}))
 	defer srv.Close()
 
@@ -93,7 +93,7 @@ func TestArtworkLookup_CachesEmptyResult(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		json.NewEncoder(w).Encode(itunesResponse{Results: nil})
+		_ = json.NewEncoder(w).Encode(itunesResponse{Results: nil})
 	}))
 	defer srv.Close()
 

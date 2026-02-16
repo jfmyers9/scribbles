@@ -57,13 +57,13 @@ func ipcConnect(appID string) (*ipcClient, error) {
 		"client_id": appID,
 	})
 	if err := c.writeFrame(opHandshake, handshake); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("handshake write: %w", err)
 	}
 
 	// Read handshake response.
 	if _, _, err := c.readFrame(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("handshake read: %w", err)
 	}
 	return c, nil
@@ -117,9 +117,9 @@ func (c *ipcClient) SetActivity(a Activity) error {
 	return nil
 }
 
-func (c *ipcClient) Close() {
-	c.writeFrame(opClose, []byte("{}"))
-	c.conn.Close()
+func (c *ipcClient) Close() error {
+	_ = c.writeFrame(opClose, []byte("{}"))
+	return c.conn.Close()
 }
 
 // writeFrame sends a Discord IPC frame: [opcode LE u32][length LE u32][payload].
@@ -154,6 +154,6 @@ func (c *ipcClient) readFrame() (uint32, []byte, error) {
 
 func nonce() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return fmt.Sprintf("%x", b)
 }

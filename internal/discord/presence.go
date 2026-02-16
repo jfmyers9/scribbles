@@ -18,7 +18,7 @@ type TrackUpdate struct {
 
 type rpcClient interface {
 	SetActivity(Activity) error
-	Close()
+	Close() error
 }
 
 // Presence manages Discord Rich Presence updates.
@@ -152,6 +152,6 @@ func (p *Presence) close() {
 	if p.client == nil {
 		return
 	}
-	p.client.Close()
+	_ = p.client.Close()
 	p.client = nil
 }
