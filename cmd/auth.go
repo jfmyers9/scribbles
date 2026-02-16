@@ -31,26 +31,9 @@ func init() {
 	rootCmd.AddCommand(authCmd)
 }
 
-func runAuth(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-	reader := bufio.NewReader(os.Stdin)
-
-	// Load existing config
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Step 1: Get API credentials
-	fmt.Println("Last.fm Authentication")
-	fmt.Println("======================")
-	fmt.Println()
-	fmt.Println("You can get API credentials from: https://www.last.fm/api/account/create")
-	fmt.Println()
-
-	// Check if we already have credentials
+func promptCredentials(reader *bufio.Reader, cfg *config.Config) error {
 	if cfg.LastFM.APIKey != "" && cfg.LastFM.APISecret != "" {
-		fmt.Printf("Found existing API credentials.\n")
+		fmt.Println("Found existing API credentials.")
 		fmt.Printf("API Key: %s\n", cfg.LastFM.APIKey)
 		fmt.Print("\nUse existing credentials? [Y/n]: ")
 		response, err := reader.ReadString('\n')
@@ -59,13 +42,11 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		}
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "" && response != "y" && response != "yes" {
-			// User wants to enter new credentials
 			cfg.LastFM.APIKey = ""
 			cfg.LastFM.APISecret = ""
 		}
 	}
 
-	// Prompt for API key if not set
 	if cfg.LastFM.APIKey == "" {
 		fmt.Print("Enter your Last.fm API Key: ")
 		apiKey, err := reader.ReadString('\n')
@@ -75,7 +56,6 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		cfg.LastFM.APIKey = strings.TrimSpace(apiKey)
 	}
 
-	// Prompt for API secret if not set
 	if cfg.LastFM.APISecret == "" {
 		fmt.Print("Enter your Last.fm API Secret: ")
 		apiSecret, err := reader.ReadString('\n')
@@ -85,36 +65,25 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		cfg.LastFM.APISecret = strings.TrimSpace(apiSecret)
 	}
 
-	// Validate inputs
 	if cfg.LastFM.APIKey == "" || cfg.LastFM.APISecret == "" {
 		return fmt.Errorf("API key and secret are required")
 	}
 
-	// Step 2: Create scrobbler client and get auth token
-	client := scrobbler.New(cfg.LastFM.APIKey, cfg.LastFM.APISecret)
+	return nil
+}
 
-	fmt.Println("\nGenerating authentication token...")
-	token, authURL, err := client.AuthenticateWithToken(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to generate auth token: %w", err)
-	}
+func getSessionWithRetries(ctx context.Context, client *scrobbler.Client, token string) (string, error) {
+	const (
+		maxRetries = 3
+		retryDelay = 2 * time.Second
+	)
 
-	// Step 3: Direct user to authorize
-	fmt.Println("\nPlease visit this URL to authorize scribbles:")
-	fmt.Printf("\n  %s\n\n", authURL)
-	fmt.Println("After authorizing, press Enter to continue...")
-	_, _ = reader.ReadString('\n')
-
-	// Step 4: Get session key (with retries)
-	fmt.Println("Retrieving session key...")
 	var sessionKey string
-	maxRetries := 3
-	retryDelay := 2 * time.Second
-
-	for i := 0; i < maxRetries; i++ {
+	var err error
+	for i := range maxRetries {
 		sessionKey, err = client.GetSession(ctx, token)
 		if err == nil {
-			break
+			return sessionKey, nil
 		}
 
 		if i < maxRetries-1 {
@@ -124,11 +93,47 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	return "", fmt.Errorf("failed to get session key after %d attempts: %w", maxRetries, err)
+}
+
+func runAuth(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+	reader := bufio.NewReader(os.Stdin)
+
+	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("failed to get session key after %d attempts: %w", maxRetries, err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Step 5: Save session key to config
+	fmt.Println("Last.fm Authentication")
+	fmt.Println("======================")
+	fmt.Println()
+	fmt.Println("You can get API credentials from: https://www.last.fm/api/account/create")
+	fmt.Println()
+
+	if err := promptCredentials(reader, cfg); err != nil {
+		return err
+	}
+
+	client := scrobbler.New(cfg.LastFM.APIKey, cfg.LastFM.APISecret)
+
+	fmt.Println("\nGenerating authentication token...")
+	token, authURL, err := client.AuthenticateWithToken(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to generate auth token: %w", err)
+	}
+
+	fmt.Println("\nPlease visit this URL to authorize scribbles:")
+	fmt.Printf("\n  %s\n\n", authURL)
+	fmt.Println("After authorizing, press Enter to continue...")
+	_, _ = reader.ReadString('\n')
+
+	fmt.Println("Retrieving session key...")
+	sessionKey, err := getSessionWithRetries(ctx, client, token)
+	if err != nil {
+		return err
+	}
+
 	cfg.LastFM.SessionKey = sessionKey
 	if err := cfg.Save(); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
