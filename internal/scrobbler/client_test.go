@@ -95,9 +95,9 @@ func TestScrobbleBatch(t *testing.T) {
 
 func TestIsAuthenticated(t *testing.T) {
 	tests := []struct {
-		name           string
-		sessionKey     string
-		authenticated  bool
+		name          string
+		sessionKey    string
+		authenticated bool
 	}{
 		{
 			name:          "with session key",

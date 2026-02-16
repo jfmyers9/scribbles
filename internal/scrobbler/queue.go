@@ -39,12 +39,12 @@ func NewQueue(dbPath string) (*Queue, error) {
 
 	// Configure SQLite for optimal performance and safety
 	pragmas := []string{
-		"PRAGMA foreign_keys = ON",           // Enforce foreign key constraints
-		"PRAGMA busy_timeout = 10000",        // Wait up to 10 seconds on lock
-		"PRAGMA synchronous = NORMAL",        // Balance between safety and performance
-		"PRAGMA journal_mode = WAL",          // Write-Ahead Logging for concurrent access
-		"PRAGMA temp_store = MEMORY",         // Use memory for temp tables
-		"PRAGMA cache_size = -64000",         // 64MB cache
+		"PRAGMA foreign_keys = ON",    // Enforce foreign key constraints
+		"PRAGMA busy_timeout = 10000", // Wait up to 10 seconds on lock
+		"PRAGMA synchronous = NORMAL", // Balance between safety and performance
+		"PRAGMA journal_mode = WAL",   // Write-Ahead Logging for concurrent access
+		"PRAGMA temp_store = MEMORY",  // Use memory for temp tables
+		"PRAGMA cache_size = -64000",  // 64MB cache
 	}
 
 	for _, pragma := range pragmas {

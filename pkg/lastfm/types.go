@@ -6,13 +6,13 @@ import (
 
 // Track represents a music track for scrobbling or now playing updates.
 type Track struct {
-	Artist      string    // Required: Artist name
-	Track       string    // Required: Track name
-	Album       string    // Optional: Album name
-	AlbumArtist string    // Optional: Album artist (if different from track artist)
-	Duration    int       // Optional: Track duration in seconds
-	TrackNumber int       // Optional: Track number on album
-	MBTrackID   string    // Optional: MusicBrainz track ID
+	Artist      string // Required: Artist name
+	Track       string // Required: Track name
+	Album       string // Optional: Album name
+	AlbumArtist string // Optional: Album artist (if different from track artist)
+	Duration    int    // Optional: Track duration in seconds
+	TrackNumber int    // Optional: Track number on album
+	MBTrackID   string // Optional: MusicBrainz track ID
 }
 
 // Scrobble represents a single scrobble with timestamp.
@@ -35,10 +35,10 @@ type Session struct {
 
 // NowPlayingResponse represents the response from track.updateNowPlaying.
 type NowPlayingResponse struct {
-	Artist      string
-	Track       string
-	Album       string
-	AlbumArtist string
+	Artist         string
+	Track          string
+	Album          string
+	AlbumArtist    string
 	IgnoredMessage struct {
 		Code int
 		Text string
@@ -47,13 +47,13 @@ type NowPlayingResponse struct {
 
 // ScrobbleResponse represents the response from track.scrobble.
 type ScrobbleResponse struct {
-	Accepted int // Number of scrobbles accepted
-	Ignored  int // Number of scrobbles ignored
+	Accepted  int // Number of scrobbles accepted
+	Ignored   int // Number of scrobbles ignored
 	Scrobbles []struct {
-		Artist    string
-		Track     string
-		Album     string
-		Timestamp int64
+		Artist         string
+		Track          string
+		Album          string
+		Timestamp      int64
 		IgnoredMessage struct {
 			Code int
 			Text string

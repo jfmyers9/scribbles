@@ -230,9 +230,10 @@ func extractWindow(text string, startPos int, width int) string {
 // Algorithm:
 // 1. Create extended text: "original{separator}original" for continuous looping
 // 2. Calculate scroll position: time.Now().Unix() * speed % len(extended)
-//    - speed is in characters per second
-//    - position wraps around to create infinite loop
-//    - deterministic: same timestamp = same output (important for testing)
+//   - speed is in characters per second
+//   - position wraps around to create infinite loop
+//   - deterministic: same timestamp = same output (important for testing)
+//
 // 3. Extract a window of exactly 'width' display columns starting at position
 // 4. Pad with spaces if needed to ensure exact width
 //

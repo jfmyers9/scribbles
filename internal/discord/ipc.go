@@ -20,13 +20,13 @@ const (
 
 // Activity types sent via Discord Rich Presence.
 type Activity struct {
-	Type       int          `json:"type,omitempty"`
-	Name       string       `json:"name,omitempty"`
-	Details    string       `json:"details,omitempty"`
-	State      string       `json:"state,omitempty"`
-	Timestamps *Timestamps  `json:"timestamps,omitempty"`
-	Assets     *Assets      `json:"assets,omitempty"`
-	Instance   bool         `json:"instance"`
+	Type       int         `json:"type,omitempty"`
+	Name       string      `json:"name,omitempty"`
+	Details    string      `json:"details,omitempty"`
+	State      string      `json:"state,omitempty"`
+	Timestamps *Timestamps `json:"timestamps,omitempty"`
+	Assets     *Assets     `json:"assets,omitempty"`
+	Instance   bool        `json:"instance"`
 }
 
 type Timestamps struct {

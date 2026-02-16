@@ -20,8 +20,8 @@ type PlayState int
 
 const (
 	StateStopped PlayState = iota // No track playing
-	StatePlaying                   // Track is currently playing
-	StatePaused                    // Track is paused
+	StatePlaying                  // Track is currently playing
+	StatePaused                   // Track is paused
 )
 
 // String returns a human-readable representation of the PlayState

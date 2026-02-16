@@ -110,11 +110,11 @@ func TestPadToWidth(t *testing.T) {
 
 func TestExtractWindow(t *testing.T) {
 	tests := []struct {
-		name      string
-		text      string
-		startPos  int
-		width     int
-		expected  string
+		name     string
+		text     string
+		startPos int
+		width    int
+		expected string
 	}{
 		{
 			name:     "extract from beginning",
