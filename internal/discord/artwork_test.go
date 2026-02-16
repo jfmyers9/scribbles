@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestArtworkLookup_ReturnsUpscaledURL(t *testing.T) {
@@ -52,6 +53,31 @@ func TestArtworkLookup_CachesResults(t *testing.T) {
 	}
 }
 
+func TestArtworkLookup_FallsBackToSongEntity(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		entity := r.URL.Query().Get("entity")
+		if entity == "album" {
+			_ = json.NewEncoder(w).Encode(itunesResponse{Results: nil})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(itunesResponse{
+			Results: []itunesResult{
+				{ArtworkURL100: "https://example.com/art/100x100bb.jpg"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	a := newArtworkLookup()
+	a.endpoint = srv.URL
+
+	got := a.Lookup("Ninajirachi", "I Love My Computer")
+	want := "https://example.com/art/600x600bb.jpg"
+	if got != want {
+		t.Errorf("Lookup() = %q, want %q", got, want)
+	}
+}
+
 func TestArtworkLookup_EmptyOnNoResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(itunesResponse{Results: nil})
@@ -89,7 +115,7 @@ func TestArtworkLookup_EmptyOnUnreachable(t *testing.T) {
 	}
 }
 
-func TestArtworkLookup_CachesEmptyResult(t *testing.T) {
+func TestArtworkLookup_NegativeCacheWithTTL(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -97,13 +123,29 @@ func TestArtworkLookup_CachesEmptyResult(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	now := time.Now()
 	a := newArtworkLookup()
 	a.endpoint = srv.URL
+	a.now = func() time.Time { return now }
 
-	a.Lookup("Unknown", "Album")
-	a.Lookup("Unknown", "Album")
+	// First lookup misses (album + song fallback) — cached as negative
+	if got := a.Lookup("Unknown", "Album"); got != "" {
+		t.Errorf("first lookup: expected empty, got %q", got)
+	}
+	firstHits := hits.Load()
 
-	if n := hits.Load(); n != 1 {
-		t.Errorf("expected 1 HTTP request for cached empty result, got %d", n)
+	// Second lookup within TTL — served from negative cache, no new requests
+	if got := a.Lookup("Unknown", "Album"); got != "" {
+		t.Errorf("within TTL: expected empty, got %q", got)
+	}
+	if n := hits.Load(); n != firstHits {
+		t.Errorf("expected no new requests within TTL, got %d more", n-firstHits)
+	}
+
+	// Advance past TTL — negative cache expires, retries
+	now = now.Add(negativeCacheTTL + time.Second)
+	a.Lookup("Unknown", "Album")
+	if n := hits.Load(); n == firstHits {
+		t.Error("expected new requests after TTL expiry, got none")
 	}
 }
