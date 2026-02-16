@@ -1,0 +1,1 @@
+{"id":"472c32","title":"Fix: discord-rpc 512-byte buffer truncates IPC responses","status":"done","type":"bug","priority":1,"labels":["fix"],"created":"2026-02-16T07:29:49.448608Z","updated":"2026-02-16T07:30:31.407959Z","description":"## Feedback Analysis"}

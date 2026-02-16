@@ -15,6 +15,7 @@ daemon.
   correctly
 - **Offline Queue**: Queues scrobbles when offline and retries
   automatically
+- **Discord Rich Presence**: Show current track in your Discord profile
 - **CLI Status**: Query current track for tmux/status bars
 - **Easy Setup**: Simple authentication flow and automatic installation
 
@@ -155,6 +156,11 @@ lastfm:
   api_key: "your-api-key"
   api_secret: "your-api-secret"
   session_key: "your-session-key"
+
+# Discord Rich Presence
+discord:
+  enabled: false
+  app_id: ""  # Create at https://discord.com/developers/applications
 ```
 
 ## Commands
@@ -172,6 +178,8 @@ Flags:
 - `--log-level <level>`: Set log level (debug, info, warn, error)
 - `--data-dir <path>`: Data directory for state and queue (default:
   `~/.local/share/scribbles`)
+- `--tui`: Enable terminal UI for now playing display
+- `--discord`: Enable Discord Rich Presence
 
 The daemon:
 - Polls Apple Music every 3 seconds (configurable)
@@ -470,6 +478,36 @@ The visual scrolling effect depends on your tmux `status-interval`:
 Adjust `marquee_speed` based on your preferred refresh interval for optimal
 readability.
 
+## Discord Rich Presence
+
+Show the currently playing track in your Discord profile with
+"Listening to" status.
+
+### Setup
+
+1. Create a Discord application at
+   https://discord.com/developers/applications
+2. Copy the Application ID
+3. (Optional) Upload an icon in the app's Rich Presence > Art
+   Assets section — name it `scribbles` for the small icon
+4. Add to your config:
+
+```yaml
+discord:
+  enabled: true
+  app_id: "your-application-id"
+```
+
+Or use the `--discord` flag:
+
+```bash
+scribbles daemon --discord
+```
+
+Discord displays: track name, artist, album (on hover), and
+elapsed/remaining time. The presence clears when music is paused
+or stopped.
+
 ## How Scrobbling Works
 
 Scribbles follows the official Last.fm scrobbling rules:
@@ -592,6 +630,8 @@ scribbles/
 │   │   ├── state.go        # Track state management
 │   │   ├── poller.go       # Music polling
 │   │   └── launchd.go      # launchd plist generation
+│   ├── discord/            # Discord Rich Presence
+│   │   └── presence.go     # IPC client and activity updates
 │   └── config/             # Configuration
 │       └── config.go
 ├── go.mod

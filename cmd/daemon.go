@@ -10,6 +10,7 @@ import (
 
 	"github.com/jfmyers9/scribbles/internal/config"
 	"github.com/jfmyers9/scribbles/internal/daemon"
+	"github.com/jfmyers9/scribbles/internal/discord"
 	"github.com/jfmyers9/scribbles/internal/music"
 	"github.com/jfmyers9/scribbles/internal/scrobbler"
 	"github.com/jfmyers9/scribbles/internal/tui"
@@ -22,6 +23,7 @@ var (
 	daemonLogLevel string
 	daemonDataDir  string
 	daemonTUI      bool
+	daemonDiscord  bool
 )
 
 // daemonCmd represents the daemon command
@@ -35,6 +37,7 @@ The daemon will:
 - Track playback time and handle pause/resume correctly
 - Scrobble tracks to Last.fm when they meet the scrobbling threshold (50% or 4 minutes)
 - Queue failed scrobbles for retry
+- Optionally show the current track via Discord Rich Presence (--discord)
 - Handle graceful shutdown on SIGINT/SIGTERM
 
 The daemon runs in the foreground and logs to stderr by default.
@@ -49,6 +52,7 @@ func init() {
 	daemonCmd.Flags().StringVar(&daemonLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	daemonCmd.Flags().StringVar(&daemonDataDir, "data-dir", "", "Data directory for state and queue (default: ~/.local/share/scribbles)")
 	daemonCmd.Flags().BoolVar(&daemonTUI, "tui", false, "Enable terminal UI for now playing display")
+	daemonCmd.Flags().BoolVar(&daemonDiscord, "discord", false, "Enable Discord Rich Presence")
 }
 
 func runDaemon(cmd *cobra.Command, args []string) error {
@@ -122,6 +126,16 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	d, err := daemon.New(daemonCfg, musicClient, scrobblerClient, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create daemon: %w", err)
+	}
+
+	// Start Discord Rich Presence if enabled
+	enableDiscord := daemonDiscord || cfg.Discord.Enabled
+	if enableDiscord && cfg.Discord.AppID != "" {
+		discordUpdates := d.EnableDiscord()
+		presence := discord.New(cfg.Discord.AppID, logger)
+		discordCtx, discordCancel := context.WithCancel(context.Background())
+		defer discordCancel()
+		go presence.Run(discordCtx, discordUpdates)
 	}
 
 	if enableTUI {

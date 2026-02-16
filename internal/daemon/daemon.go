@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jfmyers9/scribbles/internal/discord"
 	"github.com/jfmyers9/scribbles/internal/music"
 	"github.com/jfmyers9/scribbles/internal/scrobbler"
 	"github.com/rs/zerolog"
@@ -35,6 +36,9 @@ type Daemon struct {
 
 	// TUI support
 	tuiUpdates chan TrackUpdate // Channel for TUI to receive updates
+
+	// Discord Rich Presence support
+	discordUpdates chan discord.TrackUpdate
 }
 
 // New creates a new Daemon instance
@@ -152,7 +156,15 @@ func (d *Daemon) handleUpdates(ctx context.Context, updates <-chan TrackUpdate) 
 				select {
 				case d.tuiUpdates <- update:
 				default:
-					// TUI channel full, skip update
+				}
+			}
+
+			// Forward to Discord if enabled (non-blocking)
+			if d.discordUpdates != nil {
+				du := discord.TrackUpdate{Track: update.Track, Err: update.Err}
+				select {
+				case d.discordUpdates <- du:
+				default:
 				}
 			}
 
@@ -408,6 +420,12 @@ func (d *Daemon) Shutdown() error {
 func (d *Daemon) EnableTUI() <-chan TrackUpdate {
 	d.tuiUpdates = make(chan TrackUpdate, 10)
 	return d.tuiUpdates
+}
+
+// EnableDiscord creates and returns a channel for Discord Rich Presence updates
+func (d *Daemon) EnableDiscord() <-chan discord.TrackUpdate {
+	d.discordUpdates = make(chan discord.TrackUpdate, 10)
+	return d.discordUpdates
 }
 
 // GetState returns the current track state

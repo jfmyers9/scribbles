@@ -18,6 +18,12 @@ type Config struct {
 	LastFM           LastFMConfig
 	Logging          LoggingConfig
 	TUI              TUIConfig
+	Discord          DiscordConfig
+}
+
+type DiscordConfig struct {
+	Enabled bool
+	AppID   string
 }
 
 type TUIConfig struct {
@@ -58,6 +64,8 @@ func Load() (*Config, error) {
 	v.SetDefault("tui.enabled", false)
 	v.SetDefault("tui.refresh_rate", 500)
 	v.SetDefault("tui.theme", "default")
+	v.SetDefault("discord.enabled", false)
+	v.SetDefault("discord.app_id", "")
 
 	_ = v.ReadInConfig()
 
@@ -84,6 +92,10 @@ func Load() (*Config, error) {
 			Enabled:     v.GetBool("tui.enabled"),
 			RefreshRate: v.GetInt("tui.refresh_rate"),
 			Theme:       v.GetString("tui.theme"),
+		},
+		Discord: DiscordConfig{
+			Enabled: v.GetBool("discord.enabled"),
+			AppID:   v.GetString("discord.app_id"),
 		},
 	}
 
@@ -180,6 +192,8 @@ func (c *Config) Save() error {
 	v.Set("tui.enabled", c.TUI.Enabled)
 	v.Set("tui.refresh_rate", c.TUI.RefreshRate)
 	v.Set("tui.theme", c.TUI.Theme)
+	v.Set("discord.enabled", c.Discord.Enabled)
+	v.Set("discord.app_id", c.Discord.AppID)
 
 	return v.WriteConfigAs(configFile)
 }

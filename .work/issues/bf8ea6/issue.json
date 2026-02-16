@@ -1,0 +1,1 @@
+{"id":"bf8ea6","title":"Phase 1: Replace discord-rpc library with internal IPC client","status":"done","type":"bug","priority":1,"labels":["ipc-buffer-fix"],"parent_id":"e9c79c","created":"2026-02-16T07:30:22.967224Z","updated":"2026-02-16T07:33:40.158946Z","description":"## Acceptance Criteria"}
