@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/jfmyers9/scribbles/internal/daemon"
 	"github.com/spf13/cobra"
@@ -126,23 +128,27 @@ func loadDaemon(plistPath string) error {
 	uid := string(uidOutput)
 	uid = uid[:len(uid)-1] // Remove trailing newline
 
-	// Use launchctl bootstrap to load the agent
+	// bootout returns before launchd has fully released the old process.
+	// Retry only the transient I/O error that occurs during that window.
 	domain := fmt.Sprintf("gui/%s", uid)
-	cmd := exec.Command("launchctl", "bootstrap", domain, plistPath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Check if already loaded
-		if len(output) > 0 {
-			outputStr := string(output)
-			// Bootstrap returns error if already loaded, which is OK
-			if len(outputStr) > 0 {
-				return fmt.Errorf("launchctl bootstrap failed: %s", outputStr)
-			}
+	for attempt := 0; attempt < 20; attempt++ {
+		cmd := exec.Command("launchctl", "bootstrap", domain, plistPath)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			return nil
 		}
-		return fmt.Errorf("failed to run launchctl bootstrap: %w", err)
+
+		if !strings.Contains(string(output), "Bootstrap failed: 5") || attempt == 19 {
+			if len(output) > 0 {
+				return fmt.Errorf("launchctl bootstrap failed: %s", output)
+			}
+			return fmt.Errorf("failed to run launchctl bootstrap: %w", err)
+		}
+
+		time.Sleep(250 * time.Millisecond)
 	}
 
-	return nil
+	return fmt.Errorf("launchctl bootstrap failed after retries")
 }
 
 // unloadDaemon unloads the daemon using launchctl
