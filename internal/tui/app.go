@@ -402,9 +402,9 @@ func (a *App) buildNowPlayingText() string {
 
 	var sb strings.Builder
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(a.currentTrack.Name)))
-	sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(a.currentTrack.Artist)))
-	sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(a.currentTrack.Album)))
+	fmt.Fprintf(&sb, "[white::b]%s[-:-:-]\n", tview.Escape(a.currentTrack.Name))
+	fmt.Fprintf(&sb, "[yellow]%s[-]\n", tview.Escape(a.currentTrack.Artist))
+	fmt.Fprintf(&sb, "[gray]%s[-]", tview.Escape(a.currentTrack.Album))
 
 	// Play state indicator
 	stateIcon := "[green]\u25B6[-]" // Play triangle
