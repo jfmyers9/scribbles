@@ -40,14 +40,15 @@ mkdir -p "$BUILD_DIR"
 
 # Build for macOS (Intel)
 echo -e "${GREEN}Building for darwin/amd64...${NC}"
-GOOS=darwin GOARCH=amd64 go build \
+# systray uses Cocoa, so CGO must remain enabled for both macOS targets.
+CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build \
     -ldflags "$LDFLAGS" \
     -o "${BUILD_DIR}/${BINARY_NAME}-darwin-amd64" \
     .
 
 # Build for macOS (Apple Silicon)
 echo -e "${GREEN}Building for darwin/arm64...${NC}"
-GOOS=darwin GOARCH=arm64 go build \
+CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build \
     -ldflags "$LDFLAGS" \
     -o "${BUILD_DIR}/${BINARY_NAME}-darwin-arm64" \
     .
