@@ -17,6 +17,7 @@ daemon.
   automatically
 - **Discord Rich Presence**: Show current track in your Discord profile
 - **CLI Status**: Query current track for tmux/status bars
+- **macOS Menu Bar**: See daemon activity, current track, and scrobble progress
 - **Easy Setup**: Simple authentication flow and automatic installation
 
 ## Last.fm SDK
@@ -114,6 +115,8 @@ This will:
 - Configure it to start on login
 
 The daemon will now monitor Apple Music and scrobble tracks to Last.fm.
+It also adds a Scribbles item to the macOS menu bar showing the current track
+and scrobble progress.
 
 ### 3. Check Current Track
 
@@ -180,6 +183,7 @@ Flags:
   `~/.local/share/scribbles`)
 - `--tui`: Enable terminal UI for now playing display
 - `--discord`: Enable Discord Rich Presence
+- `--menu-bar`: Show current scrobble status in the macOS menu bar
 
 The daemon:
 - Polls Apple Music every 3 seconds (configurable)

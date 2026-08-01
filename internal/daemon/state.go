@@ -105,6 +105,9 @@ func (s *State) UpdatePosition(track *music.Track) error {
 		return s.persist()
 	}
 
+	// Keep the latest playback state and position for status consumers.
+	s.current.Track = track
+
 	// Same track - update state based on play state
 	switch track.State {
 	case music.StatePlaying:

@@ -18,6 +18,7 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 	<array>
 		<string>{{.BinaryPath}}</string>
 		<string>daemon</string>
+		<string>--menu-bar</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

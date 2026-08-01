@@ -90,7 +90,11 @@ func (d *Daemon) Run() error {
 		os.Exit(1)
 	}()
 
-	// Run the daemon
+	return d.RunContext(ctx)
+}
+
+// RunContext starts the daemon until ctx is canceled.
+func (d *Daemon) RunContext(ctx context.Context) error {
 	if err := d.run(ctx); err != nil && err != context.Canceled {
 		return err
 	}

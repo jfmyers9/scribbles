@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jfmyers9/scribbles/internal/config"
 	"github.com/jfmyers9/scribbles/internal/daemon"
 	"github.com/jfmyers9/scribbles/internal/discord"
+	"github.com/jfmyers9/scribbles/internal/menubar"
 	"github.com/jfmyers9/scribbles/internal/music"
 	"github.com/jfmyers9/scribbles/internal/scrobbler"
 	"github.com/jfmyers9/scribbles/internal/tui"
@@ -24,6 +27,7 @@ var (
 	daemonDataDir  string
 	daemonTUI      bool
 	daemonDiscord  bool
+	daemonMenuBar  bool
 )
 
 // daemonCmd represents the daemon command
@@ -38,6 +42,7 @@ The daemon will:
 - Scrobble tracks to Last.fm when they meet the scrobbling threshold (50% or 4 minutes)
 - Queue failed scrobbles for retry
 - Optionally show the current track via Discord Rich Presence (--discord)
+- Optionally show scrobble status in the macOS menu bar (--menu-bar)
 - Handle graceful shutdown on SIGINT/SIGTERM
 
 The daemon runs in the foreground and logs to stderr by default.
@@ -53,6 +58,7 @@ func init() {
 	daemonCmd.Flags().StringVar(&daemonDataDir, "data-dir", "", "Data directory for state and queue (default: ~/.local/share/scribbles)")
 	daemonCmd.Flags().BoolVar(&daemonTUI, "tui", false, "Enable terminal UI for now playing display")
 	daemonCmd.Flags().BoolVar(&daemonDiscord, "discord", false, "Enable Discord Rich Presence")
+	daemonCmd.Flags().BoolVar(&daemonMenuBar, "menu-bar", false, "Show current scrobble status in the macOS menu bar")
 }
 
 func runDaemon(cmd *cobra.Command, args []string) error {
@@ -142,8 +148,59 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		return runDaemonWithTUI(d, musicClient, cfg, logger)
 	}
 
+	if daemonMenuBar {
+		return runDaemonWithMenuBar(d, logger)
+	}
+
 	if err := d.Run(); err != nil {
 		return fmt.Errorf("daemon error: %w", err)
+	}
+
+	if err := d.Shutdown(); err != nil {
+		logger.Error().Err(err).Msg("Error during shutdown")
+		return err
+	}
+
+	logger.Info().Msg("Daemon stopped")
+	return nil
+}
+
+func runDaemonWithMenuBar(d *daemon.Daemon, logger zerolog.Logger) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+	go func() {
+		select {
+		case <-sigChan:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	daemonDone := make(chan error, 1)
+	go func() {
+		err := d.RunContext(ctx)
+		daemonDone <- err
+		cancel()
+	}()
+
+	menubar.Run(ctx, func() menubar.Snapshot {
+		state := d.GetState()
+		return menubar.Snapshot{
+			Track:     state.Track,
+			Scrobbled: state.Scrobbled,
+			Played:    d.GetPlayedDuration(),
+			Pending:   d.GetPendingCount(),
+		}
+	})
+	cancel()
+
+	if err := <-daemonDone; err != nil && err != context.Canceled {
+		logger.Error().Err(err).Msg("Daemon error")
+		return err
 	}
 
 	if err := d.Shutdown(); err != nil {

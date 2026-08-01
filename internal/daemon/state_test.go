@@ -195,3 +195,27 @@ func TestFlush_NoOpWhenClean(t *testing.T) {
 		t.Error("Flush wrote to disk when state was clean")
 	}
 }
+
+func TestUpdatePositionKeepsLatestTrackState(t *testing.T) {
+	s := newTestState(t, time.Hour)
+	track := &music.Track{
+		Name:   "Song",
+		Artist: "Artist",
+		Album:  "Album",
+		State:  music.StatePlaying,
+	}
+	if err := s.SetTrack(track); err != nil {
+		t.Fatalf("SetTrack: %v", err)
+	}
+
+	paused := *track
+	paused.State = music.StatePaused
+	if err := s.UpdatePosition(&paused); err != nil {
+		t.Fatalf("UpdatePosition: %v", err)
+	}
+
+	state := s.GetState()
+	if state.Track == nil || state.Track.State != music.StatePaused {
+		t.Fatalf("state track = %#v, want paused track", state.Track)
+	}
+}
