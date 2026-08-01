@@ -7,11 +7,8 @@ import (
 
 func TestNew(t *testing.T) {
 	client := New("test_key", "test_secret")
-	if client == nil {
-		t.Fatal("expected non-nil client")
-	}
-	if client.client == nil {
-		t.Fatal("expected non-nil client")
+	if client == nil || client.client == nil {
+		t.Fatal("expected client and HTTP client to be non-nil")
 	}
 }
 

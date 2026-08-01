@@ -411,7 +411,7 @@ func (a *App) buildNowPlayingText() string {
 	if a.currentTrack.State == music.StatePaused {
 		stateIcon = "[yellow]\u23F8[-]" // Pause icon
 	}
-	sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
+	fmt.Fprintf(&sb, "\n\n%s", stateIcon)
 	return sb.String()
 }
 
@@ -444,8 +444,8 @@ func (a *App) buildScrobbleText(playedGetter func() time.Duration) string {
 
 	if a.trackState == nil || a.currentTrack == nil || a.currentTrack.State == music.StateStopped {
 		sb.WriteString("[gray]No track[-]\n\n")
-		sb.WriteString(fmt.Sprintf("Pending: %d\n", a.pendingCount))
-		sb.WriteString(fmt.Sprintf("Session: %s", formatDuration(time.Since(a.sessionStart))))
+		fmt.Fprintf(&sb, "Pending: %d\n", a.pendingCount)
+		fmt.Fprintf(&sb, "Session: %s", formatDuration(time.Since(a.sessionStart)))
 	} else {
 		// Scrobble progress
 		if a.trackState.Scrobbled {
