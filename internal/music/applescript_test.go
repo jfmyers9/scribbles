@@ -2,6 +2,7 @@ package music
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -9,6 +10,9 @@ import (
 // TestAppleScriptClient_Integration tests the AppleScript client against the real Music app
 // This is an integration test and requires Apple Music to be installed
 func TestAppleScriptClient_Integration(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("AppleScript is only available on macOS")
+	}
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}

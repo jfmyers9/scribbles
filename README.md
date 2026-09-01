@@ -3,8 +3,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/jfmyers9/scribbles.svg)](https://pkg.go.dev/github.com/jfmyers9/scribbles)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jfmyers9/scribbles)](https://goreportcard.com/report/github.com/jfmyers9/scribbles)
 
-A lightweight Apple Music scrobbler for Last.fm that runs as a macOS
-daemon.
+A lightweight Apple Music scrobbler for Last.fm. It monitors the native Music
+app on macOS and browser playback exposed through MPRIS on Linux.
 
 ## Features
 
@@ -18,6 +18,8 @@ daemon.
 - **Discord Rich Presence**: Show current track in your Discord profile
 - **CLI Status**: Query current track for tmux/status bars
 - **macOS Menu Bar**: See daemon activity, current track, and scrobble progress
+- **Linux Browser Support**: Scrobble Apple Music browser playback exposed by
+  Firefox, Chromium, or desktop media integration through MPRIS
 - **Easy Setup**: Simple authentication flow and automatic installation
 
 ## Last.fm SDK
@@ -117,6 +119,12 @@ This will:
 The daemon will now monitor Apple Music and scrobble tracks to Last.fm.
 It also adds a Scribbles item to the macOS menu bar showing the current track
 and scrobble progress.
+
+On Linux, build from source and run `scribbles daemon` inside the desktop user
+session so it can access the session D-Bus. The browser must expose media over
+MPRIS; `playerctl metadata` can be used to verify this when playerctl is
+installed. Browser integrations that omit track duration are scrobbled only
+after four minutes of observed playback, the conservative Last.fm threshold.
 
 ### 3. Check Current Track
 

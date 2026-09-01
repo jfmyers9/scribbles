@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -97,6 +98,9 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	// When TUI is active, logging to stderr corrupts tview's terminal.
 	// Redirect logs to a file so they are preserved but don't interfere.
 	enableTUI := daemonTUI || cfg.TUI.Enabled
+	if daemonMenuBar && runtime.GOOS != "darwin" {
+		return fmt.Errorf("--menu-bar is only supported on macOS")
+	}
 	if enableTUI && logFile == "" {
 		logFile = filepath.Join(dataDir, "daemon.log")
 	}
@@ -114,7 +118,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 
 	logger.Info().Str("data_dir", dataDir).Msg("Using data directory")
 
-	musicClient := music.NewAppleScriptClient()
+	musicClient := music.NewClient()
 	scrobblerClient := scrobbler.NewWithSession(
 		cfg.LastFM.APIKey,
 		cfg.LastFM.APISecret,

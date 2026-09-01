@@ -88,7 +88,7 @@ func runPlay(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := music.NewAppleScriptClient()
+	client := music.NewClient()
 	if err := client.Play(ctx); err != nil {
 		return fmt.Errorf("failed to play: %w", err)
 	}
@@ -100,7 +100,7 @@ func runPause(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := music.NewAppleScriptClient()
+	client := music.NewClient()
 	if err := client.Pause(ctx); err != nil {
 		return fmt.Errorf("failed to pause: %w", err)
 	}
@@ -112,7 +112,7 @@ func runPlayPause(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := music.NewAppleScriptClient()
+	client := music.NewClient()
 	if err := client.PlayPause(ctx); err != nil {
 		return fmt.Errorf("failed to playpause: %w", err)
 	}
@@ -124,7 +124,7 @@ func runNext(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := music.NewAppleScriptClient()
+	client := music.NewClient()
 	if err := client.NextTrack(ctx); err != nil {
 		return fmt.Errorf("failed to skip to next track: %w", err)
 	}
@@ -136,7 +136,7 @@ func runPrev(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := music.NewAppleScriptClient()
+	client := music.NewClient()
 	if err := client.PreviousTrack(ctx); err != nil {
 		return fmt.Errorf("failed to go to previous track: %w", err)
 	}

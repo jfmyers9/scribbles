@@ -17,8 +17,9 @@ const (
 )
 
 // ShouldScrobble determines if a track should be scrobbled based on Last.fm rules:
-// 1. Track must be longer than 30 seconds
-// 2. Track must have been played for at least 50% of its duration OR 4 minutes, whichever comes first
+// 1. A track with a known duration must be at least 30 seconds long.
+// 2. It must be played for at least 50% of its duration or 4 minutes.
+// 3. A track with unknown duration uses the conservative 4 minute threshold.
 //
 // Parameters:
 //   - trackDuration: Total duration of the track
@@ -28,6 +29,13 @@ const (
 //   - true if the track should be scrobbled
 //   - false if the track should not be scrobbled
 func ShouldScrobble(trackDuration, playedDuration time.Duration) bool {
+	// Some MPRIS browser integrations omit track length. Four minutes of
+	// observed playback is sufficient to satisfy Last.fm's maximum threshold
+	// without guessing a duration.
+	if trackDuration <= 0 {
+		return playedDuration >= MaxScrobbleThreshold
+	}
+
 	// Rule 1: Track must be longer than 30 seconds
 	if trackDuration < MinimumTrackDuration {
 		return false

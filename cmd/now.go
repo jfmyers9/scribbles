@@ -61,7 +61,7 @@ func runNow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create music client
-	client := music.NewAppleScriptClient()
+	client := music.NewClient()
 
 	// Get current track
 	track, err := client.GetCurrentTrack(ctx)
@@ -71,7 +71,7 @@ func runNow(cmd *cobra.Command, args []string) error {
 	}
 
 	// If not playing, exit with code 1
-	if track.State != music.StatePlaying {
+	if track == nil || track.State != music.StatePlaying {
 		os.Exit(1)
 		return nil
 	}

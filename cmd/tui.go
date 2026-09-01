@@ -45,7 +45,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	_ = cfg // Will use for configuration later
 
 	// Create music client
-	client := music.NewAppleScriptClient()
+	client := music.NewClient()
 
 	// Create tview application
 	app := tview.NewApplication()

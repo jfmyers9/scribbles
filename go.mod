@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/getlantern/systray v1.2.2
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/rivo/tview v0.42.0
 	github.com/rs/zerolog v1.34.0
