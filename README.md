@@ -123,10 +123,8 @@ and scrobble progress.
 On Linux, build from source and run `scribbles daemon` inside the desktop user
 session so it can access the session D-Bus. The browser must expose media over
 MPRIS; `playerctl metadata` can be used to verify this when playerctl is
-installed. Browser integrations that omit track duration are scrobbled only
-after Scribbles resolves the duration through Apple's public iTunes Search API.
-If no catalog match is available, Scribbles falls back to the conservative
-four-minute Last.fm threshold.
+installed. Browser integrations that omit track duration are scrobbled after
+30 seconds of observed playback.
 
 ### 3. Check Current Track
 

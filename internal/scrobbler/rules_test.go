@@ -14,18 +14,18 @@ func TestShouldScrobble(t *testing.T) {
 		description    string
 	}{
 		{
-			name:           "unknown duration, played 4 minutes",
+			name:           "unknown duration, played 30 seconds",
 			trackDuration:  0,
-			playedDuration: 4 * time.Minute,
+			playedDuration: 30 * time.Second,
 			shouldScrobble: true,
-			description:    "players without duration metadata can safely scrobble at the 4 minute cap",
+			description:    "players without duration metadata scrobble after 30 seconds",
 		},
 		{
-			name:           "unknown duration, played under 4 minutes",
+			name:           "unknown duration, played under 30 seconds",
 			trackDuration:  0,
-			playedDuration: 3*time.Minute + 59*time.Second,
+			playedDuration: 29 * time.Second,
 			shouldScrobble: false,
-			description:    "unknown duration must use the conservative 4 minute threshold",
+			description:    "unknown duration must reach the 30 second threshold",
 		},
 		{
 			name:           "track too short (29 seconds)",
