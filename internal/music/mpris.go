@@ -2,7 +2,10 @@ package music
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -19,13 +22,20 @@ const (
 
 // MPRISClient queries Linux media players through the MPRIS D-Bus interface.
 type MPRISClient struct {
-	mu         sync.Mutex
-	lastPlayer string
+	mu            sync.Mutex
+	lastPlayer    string
+	durationCache map[string]time.Duration
+	httpClient    *http.Client
+	searchURL     string
 }
 
 // NewMPRISClient creates a client for media players on the Linux desktop.
 func NewMPRISClient() *MPRISClient {
-	return &MPRISClient{}
+	return &MPRISClient{
+		durationCache: make(map[string]time.Duration),
+		httpClient:    &http.Client{Timeout: 3 * time.Second},
+		searchURL:     "https://itunes.apple.com/search",
+	}
 }
 
 func sessionBus() (*dbus.Conn, error) {
@@ -81,7 +91,7 @@ func (c *MPRISClient) GetCurrentTrack(ctx context.Context) (*Track, error) {
 
 	var paused *mprisTrack
 	for _, player := range players {
-		track, err := getMPRISTrack(ctx, conn, player)
+		track, err := c.getMPRISTrack(ctx, conn, player)
 		if err != nil || track == nil {
 			// Players can disappear while their browser tab is closing.
 			continue
@@ -103,13 +113,113 @@ func (c *MPRISClient) GetCurrentTrack(ctx context.Context) (*Track, error) {
 	return nil, nil
 }
 
-func getMPRISTrack(ctx context.Context, conn *dbus.Conn, player string) (*Track, error) {
+func (c *MPRISClient) getMPRISTrack(ctx context.Context, conn *dbus.Conn, player string) (*Track, error) {
 	obj := conn.Object(player, mprisPath)
 	props := make(map[string]dbus.Variant)
 	if err := obj.CallWithContext(ctx, propertiesInterface+".GetAll", 0, mprisPlayerInterface).Store(&props); err != nil {
 		return nil, fmt.Errorf("read MPRIS properties from %s: %w", player, err)
 	}
-	return trackFromMPRISProperties(props)
+	track, err := trackFromMPRISProperties(props)
+	if err != nil || track == nil || track.Duration > 0 || !isAppleMusicMetadata(props) {
+		return track, err
+	}
+
+	track.Duration = c.appleMusicDuration(ctx, track)
+	return track, nil
+}
+
+func isAppleMusicMetadata(props map[string]dbus.Variant) bool {
+	metadata, ok := props["Metadata"].Value().(map[string]dbus.Variant)
+	if !ok {
+		return false
+	}
+	source, _ := variantString(metadata["xesam:url"])
+	parsed, err := url.Parse(source)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "music.apple.com" || strings.HasSuffix(host, ".music.apple.com")
+}
+
+type iTunesSearchResponse struct {
+	Results []struct {
+		TrackName       string `json:"trackName"`
+		ArtistName      string `json:"artistName"`
+		CollectionName  string `json:"collectionName"`
+		TrackTimeMillis int64  `json:"trackTimeMillis"`
+	} `json:"results"`
+}
+
+func (c *MPRISClient) appleMusicDuration(ctx context.Context, track *Track) time.Duration {
+	key := strings.ToLower(track.Artist + "\x00" + track.Name + "\x00" + track.Album)
+	c.mu.Lock()
+	duration, cached := c.durationCache[key]
+	c.mu.Unlock()
+	if cached {
+		return duration
+	}
+
+	duration = c.searchAppleMusicDuration(ctx, track)
+	c.mu.Lock()
+	c.durationCache[key] = duration
+	c.mu.Unlock()
+	return duration
+}
+
+func (c *MPRISClient) searchAppleMusicDuration(ctx context.Context, track *Track) time.Duration {
+	query, err := url.Parse(c.searchURL)
+	if err != nil {
+		return 0
+	}
+	params := query.Query()
+	params.Set("term", track.Artist+" "+track.Name)
+	params.Set("media", "music")
+	params.Set("entity", "song")
+	params.Set("limit", "25")
+	query.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, query.String(), nil)
+	if err != nil {
+		return 0
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0
+	}
+
+	var result iTunesSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0
+	}
+
+	name := normalizeCatalogText(track.Name)
+	artist := normalizeCatalogText(track.Artist)
+	album := normalizeCatalogText(track.Album)
+	var fallback int64
+	for _, candidate := range result.Results {
+		if normalizeCatalogText(candidate.TrackName) != name || normalizeCatalogText(candidate.ArtistName) != artist {
+			continue
+		}
+		if candidate.TrackTimeMillis <= 0 {
+			continue
+		}
+		if normalizeCatalogText(candidate.CollectionName) == album {
+			return time.Duration(candidate.TrackTimeMillis) * time.Millisecond
+		}
+		if fallback == 0 {
+			fallback = candidate.TrackTimeMillis
+		}
+	}
+	return time.Duration(fallback) * time.Millisecond
+}
+
+func normalizeCatalogText(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(value), " "))
 }
 
 func trackFromMPRISProperties(props map[string]dbus.Variant) (*Track, error) {

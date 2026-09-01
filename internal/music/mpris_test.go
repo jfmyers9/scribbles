@@ -1,6 +1,10 @@
 package music
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -63,5 +67,49 @@ func TestTrackFromMPRISPropertiesRequiresScrobbleMetadata(t *testing.T) {
 	}
 	if track != nil {
 		t.Fatalf("trackFromMPRISProperties() = %+v, want nil", track)
+	}
+}
+
+func TestAppleMusicDurationLookupAndCache(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if got := r.URL.Query().Get("term"); got != "Sun June Leave The City" {
+			t.Errorf("term = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":[
+			{"trackName":"Leave The City","artistName":"Sun June","collectionName":"Other Album","trackTimeMillis":123000},
+			{"trackName":"Leave The City","artistName":"Sun June","collectionName":"Just Be Simple / Leave The City - Single","trackTimeMillis":268749}
+		]}`))
+	}))
+	defer server.Close()
+
+	client := NewMPRISClient()
+	client.searchURL = server.URL
+	track := &Track{
+		Name:   "Leave The City",
+		Artist: "Sun June",
+		Album:  "Just Be Simple / Leave The City - Single",
+	}
+
+	for range 2 {
+		if got := client.appleMusicDuration(context.Background(), track); got != 268749*time.Millisecond {
+			t.Fatalf("appleMusicDuration() = %v", got)
+		}
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("search requests = %d, want 1", got)
+	}
+}
+
+func TestIsAppleMusicMetadata(t *testing.T) {
+	props := map[string]dbus.Variant{
+		"Metadata": dbus.MakeVariant(map[string]dbus.Variant{
+			"xesam:url": dbus.MakeVariant("https://music.apple.com/us/home"),
+		}),
+	}
+	if !isAppleMusicMetadata(props) {
+		t.Fatal("music.apple.com metadata was not recognized")
 	}
 }
