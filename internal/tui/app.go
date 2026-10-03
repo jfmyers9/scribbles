@@ -465,14 +465,14 @@ func (a *App) buildScrobbleText(playedGetter func() time.Duration) string {
 			barWidth := 10
 			filled := int(progress / 100 * float64(barWidth))
 			bar := strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", barWidth-filled)
-			sb.WriteString(fmt.Sprintf("[yellow]%s %.0f%%[-]\n", bar, progress))
+			fmt.Fprintf(&sb, "[yellow]%s %.0f%%[-]\n", bar, progress)
 		} else {
 			sb.WriteString("[gray]Waiting...[-]\n")
 		}
 
 		sb.WriteString("\n")
-		sb.WriteString(fmt.Sprintf("Pending: %d\n", a.pendingCount))
-		sb.WriteString(fmt.Sprintf("Session: %s", formatDuration(time.Since(a.sessionStart))))
+		fmt.Fprintf(&sb, "Pending: %d\n", a.pendingCount)
+		fmt.Fprintf(&sb, "Session: %s", formatDuration(time.Since(a.sessionStart)))
 	}
 
 	return sb.String()
@@ -504,7 +504,7 @@ func (a *App) buildRecentText() string {
 			if len(name) > 20 {
 				name = name[:17] + "..."
 			}
-			sb.WriteString(fmt.Sprintf("[white]%s[-]", tview.Escape(name)))
+			fmt.Fprintf(&sb, "[white]%s[-]", tview.Escape(name))
 		}
 	}
 

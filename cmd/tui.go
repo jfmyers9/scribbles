@@ -106,16 +106,16 @@ func runTUI(cmd *cobra.Command, args []string) error {
 				// Build now playing text
 				var sb strings.Builder
 				sb.WriteString("\n")
-				sb.WriteString(fmt.Sprintf("[white::b]%s[-:-:-]\n", tview.Escape(track.Name)))
-				sb.WriteString(fmt.Sprintf("[yellow]%s[-]\n", tview.Escape(track.Artist)))
-				sb.WriteString(fmt.Sprintf("[gray]%s[-]", tview.Escape(track.Album)))
+				fmt.Fprintf(&sb, "[white::b]%s[-:-:-]\n", tview.Escape(track.Name))
+				fmt.Fprintf(&sb, "[yellow]%s[-]\n", tview.Escape(track.Artist))
+				fmt.Fprintf(&sb, "[gray]%s[-]", tview.Escape(track.Album))
 
 				// Add play state indicator
 				stateIcon := "[green]\u25B6[-]" // Play triangle
 				if track.State == music.StatePaused {
 					stateIcon = "[yellow]\u23F8[-]" // Pause icon
 				}
-				sb.WriteString(fmt.Sprintf("\n\n%s", stateIcon))
+				fmt.Fprintf(&sb, "\n\n%s", stateIcon)
 				npText = sb.String()
 
 				// Build progress bar with cached width to avoid flicker
