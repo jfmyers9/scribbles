@@ -8,6 +8,22 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-02
+
+### Added
+
+- Linux media player support via MPRIS (build from source)
+
+### Fixed
+
+- Resolve missing Apple Music track durations
+- Scrobble tracks with unknown duration after 30 seconds of playback
+- Resolve staticcheck findings in terminal UI formatting
+
+### Removed
+
+- Remaining Beads issue-tracker integration
+
 ## [0.6.0] - 2026-08-01
 
 ### Added
@@ -114,7 +130,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - CLI integration for tmux status lines and other displays
 - Support for custom output formats with Go templates
 
-[unreleased]: https://github.com/jfmyers9/scribbles/compare/v0.5.0...HEAD
+[unreleased]: https://github.com/jfmyers9/scribbles/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jfmyers9/scribbles/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/jfmyers9/scribbles/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jfmyers9/scribbles/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jfmyers9/scribbles/compare/v0.3.0...v0.4.0
 [0.2.0]: https://github.com/jfmyers9/scribbles/compare/v0.1.0...v0.2.0
